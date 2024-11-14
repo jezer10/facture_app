@@ -39,7 +39,7 @@ def get_documents(
             f"{comprobante.get("datosEmisor", {}).get("numRuc")}-{document_type}-{comprobante.get("numSerie")}-{comprobante.get("numCpe")}-{document_source}"
             for comprobante in comprobantes
         ]
-        for comprobante in comprobantes[:1]:
+        for comprobante in comprobantes:
             response = requests.get(
                 f"{base_url}/{comprobante}",
                 headers={"Authorization": f"Bearer {auth_token}"},
@@ -137,7 +137,7 @@ def get_documents(
                     page = browser.new_page()
                     page.set_content(html_content)
                     page.pdf(
-                        path="documento_dinamico.pdf",
+                        path="src/generated/comprobante.pdf",
                         format="A4",
                         print_background=True
                     )
