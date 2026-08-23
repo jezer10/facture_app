@@ -1,0 +1,299 @@
+name: facture-app
+
+x-common-environment: &common-environment
+  NODE_ENV: production
+  BILLING_PUBLIC_URL: ${BILLING_PUBLIC_URL:?Set BILLING_PUBLIC_URL}
+  ALLOW_VOLATILE_ADAPTERS: 'false'
+
+x-common-app: &common-app
+  restart: unless-stopped
+  networks: [billing_private, billing_egress]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    migrations: { condition: service_completed_successfully }
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: [/usr/local/bin/start-secure-postgres.sh]
+    command: [postgres]
+    environment:
+      POSTGRES_USER: billing_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/billing-postgres-secrets/postgres_admin_password
+    secrets:
+      - postgres_admin_password
+      - core_db_password
+      - sunat_db_password
+      - webhook_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/001-create-billing-databases.sh:/docker-entrypoint-initdb.d/001-create-billing-databases.sh:ro
+      - ./deploy/postgres/start-secure-postgres.sh:/usr/local/bin/start-secure-postgres.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U billing_admin -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [billing_private]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    entrypoint: [/usr/local/bin/start-secure-redis.sh]
+    secrets:
+      - redis_health_password
+      - redis_worker_password
+      - redis_sunat_password
+      - redis_webhook_password
+    volumes:
+      - redis_data:/data
+      - ./deploy/redis/start-secure-redis.sh:/usr/local/bin/start-secure-redis.sh:ro
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'redis-cli --no-auth-warning --user billing_health -a "$$(cat /run/secrets/redis_health_password)" ping | grep -q PONG',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [billing_private]
+
+  migrations:
+    build:
+      context: .
+      target: migrations
+    environment:
+      <<: *common-environment
+      BILLING_SERVICE: migration-runner
+      CORE_DATABASE_URL: postgresql://billing_core@postgres:5432/billing_core
+      SUNAT_DATABASE_URL: postgresql://billing_sunat@postgres:5432/billing_sunat
+      WEBHOOK_DATABASE_URL: postgresql://billing_delivery@postgres:5432/billing_delivery
+      CORE_DATABASE_PASSWORD_FILE: /run/secrets/core_db_password
+      SUNAT_DATABASE_PASSWORD_FILE: /run/secrets/sunat_db_password
+      WEBHOOK_DATABASE_PASSWORD_FILE: /run/secrets/webhook_db_password
+    secrets: [core_db_password, sunat_db_password, webhook_db_password]
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [billing_private]
+    restart: 'no'
+
+  billing-api:
+    <<: *common-app
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrations: { condition: service_completed_successfully }
+    build:
+      context: .
+      target: runtime
+    command: [node, dist/apps/billing-api/main.js]
+    environment:
+      <<: *common-environment
+      BILLING_SERVICE: billing-api
+      BILLING_API_PORT: 3000
+      BILLING_TRUSTED_PROXY_CIDRS: ${BILLING_TRUSTED_PROXY_CIDRS:-172.30.250.1/32}
+      CORE_DATABASE_URL: postgresql://billing_core@postgres:5432/billing_core
+      CORE_DATABASE_PASSWORD_FILE: /run/secrets/core_db_password
+      BILLING_JWT_SECRET_FILE: /run/secrets/jwt_secret
+      BILLING_API_KEY_PEPPER_FILE: /run/secrets/api_key_pepper
+      BILLING_API_KEY_REPLAY_KEY_FILE: /run/secrets/api_key_replay_key
+      BILLING_API_KEY_REPLAY_TTL_SECONDS: ${BILLING_API_KEY_REPLAY_TTL_SECONDS:-300}
+      SUNAT_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/sunat_internal_secret
+      WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/webhook_internal_secret
+      SUNAT_INTERNAL_URL: http://sunat-service:3002
+      WEBHOOK_INTERNAL_URL: http://webhook-service:3003
+      R2_ENDPOINT: ${R2_ENDPOINT:?Set R2_ENDPOINT}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_BUCKET: ${R2_BUCKET:?Set R2_BUCKET}
+      R2_ACCESS_KEY_ID_FILE: /run/secrets/r2_access_key_id
+      R2_SECRET_ACCESS_KEY_FILE: /run/secrets/r2_secret_access_key
+    secrets:
+      - core_db_password
+      - jwt_secret
+      - api_key_pepper
+      - api_key_replay_key
+      - sunat_internal_secret
+      - webhook_internal_secret
+      - source: r2_api_access_key_id
+        target: r2_access_key_id
+      - source: r2_api_secret_access_key
+        target: r2_secret_access_key
+    ports: ['127.0.0.1:${BILLING_API_HOST_PORT:-3300}:3000']
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  billing-worker:
+    <<: *common-app
+    init: true
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=256m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    build:
+      context: .
+      target: runtime-worker
+    command: [node, dist/apps/billing-worker/main.js]
+    environment:
+      <<: *common-environment
+      BILLING_SERVICE: billing-worker
+      BILLING_WORKER_PORT: 3001
+      REDIS_URL: redis://billing_worker@redis:6379/0
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      CORE_DATABASE_URL: postgresql://billing_core@postgres:5432/billing_core
+      CORE_DATABASE_PASSWORD_FILE: /run/secrets/core_db_password
+      R2_ENDPOINT: ${R2_ENDPOINT:?Set R2_ENDPOINT}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_BUCKET: ${R2_BUCKET:?Set R2_BUCKET}
+      R2_ACCESS_KEY_ID_FILE: /run/secrets/r2_access_key_id
+      R2_SECRET_ACCESS_KEY_FILE: /run/secrets/r2_secret_access_key
+    secrets:
+      - core_db_password
+      - source: redis_worker_password
+        target: redis_password
+      - source: r2_worker_access_key_id
+        target: r2_access_key_id
+      - source: r2_worker_secret_access_key
+        target: r2_secret_access_key
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3001/internal/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  sunat-service:
+    <<: *common-app
+    build:
+      context: .
+      target: runtime
+    command: [node, dist/apps/sunat-service/main.js]
+    environment:
+      <<: *common-environment
+      BILLING_SERVICE: sunat-service
+      SUNAT_SERVICE_PORT: 3002
+      SUNAT_SERVICE_HOST: 0.0.0.0
+      REDIS_URL: redis://billing_sunat@redis:6379/0
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      SUNAT_DATABASE_URL: postgresql://billing_sunat@postgres:5432/billing_sunat
+      SUNAT_DATABASE_PASSWORD_FILE: /run/secrets/sunat_db_password
+      BILLING_MASTER_KEY_FILE: /run/secrets/master_key
+      SUNAT_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/sunat_internal_secret
+      SUNAT_PROVIDER_MODE: production
+      R2_ENDPOINT: ${R2_ENDPOINT:?Set R2_ENDPOINT}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_BUCKET: ${R2_BUCKET:?Set R2_BUCKET}
+      R2_ACCESS_KEY_ID_FILE: /run/secrets/r2_access_key_id
+      R2_SECRET_ACCESS_KEY_FILE: /run/secrets/r2_secret_access_key
+    secrets:
+      - sunat_db_password
+      - source: redis_sunat_password
+        target: redis_password
+      - source: sunat_master_key
+        target: master_key
+      - sunat_internal_secret
+      - source: r2_sunat_access_key_id
+        target: r2_access_key_id
+      - source: r2_sunat_secret_access_key
+        target: r2_secret_access_key
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3002/internal/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  webhook-service:
+    <<: *common-app
+    build:
+      context: .
+      target: runtime
+    command: [node, dist/apps/webhook-service/main.js]
+    environment:
+      <<: *common-environment
+      BILLING_SERVICE: webhook-service
+      WEBHOOK_SERVICE_PORT: 3003
+      REDIS_URL: redis://billing_webhook@redis:6379/0
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      WEBHOOK_DATABASE_URL: postgresql://billing_delivery@postgres:5432/billing_delivery
+      WEBHOOK_DATABASE_PASSWORD_FILE: /run/secrets/webhook_db_password
+      BILLING_MASTER_KEY_FILE: /run/secrets/master_key
+      WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/webhook_internal_secret
+    secrets:
+      - webhook_db_password
+      - source: redis_webhook_password
+        target: redis_password
+      - source: webhook_master_key
+        target: master_key
+      - webhook_internal_secret
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3003/internal/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  billing_private:
+    internal: true
+  billing_egress:
+    ipam:
+      config:
+        - subnet: ${BILLING_EGRESS_SUBNET:-172.30.250.0/24}
+          gateway: ${BILLING_EGRESS_GATEWAY:-172.30.250.1}
+
+secrets:
+  postgres_admin_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/postgres_admin_password' }
+  core_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/core_db_password' }
+  sunat_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/sunat_db_password' }
+  webhook_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/webhook_db_password' }
+  redis_health_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_health_password' }
+  redis_worker_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_worker_password' }
+  redis_sunat_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_sunat_password' }
+  redis_webhook_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_webhook_password' }
+  jwt_secret: { file: '${SECRET_DIR:-./deploy/secrets/local}/jwt_secret' }
+  api_key_pepper: { file: '${SECRET_DIR:-./deploy/secrets/local}/api_key_pepper' }
+  api_key_replay_key: { file: '${SECRET_DIR:-./deploy/secrets/local}/api_key_replay_key' }
+  sunat_master_key: { file: '${SECRET_DIR:-./deploy/secrets/local}/sunat_master_key' }
+  webhook_master_key: { file: '${SECRET_DIR:-./deploy/secrets/local}/webhook_master_key' }
+  sunat_internal_secret: { file: '${SECRET_DIR:-./deploy/secrets/local}/sunat_internal_secret' }
+  webhook_internal_secret: { file: '${SECRET_DIR:-./deploy/secrets/local}/webhook_internal_secret' }
+  r2_api_access_key_id: { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_api_access_key_id' }
+  r2_api_secret_access_key:
+    { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_api_secret_access_key' }
+  r2_worker_access_key_id: { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_worker_access_key_id' }
+  r2_worker_secret_access_key:
+    { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_worker_secret_access_key' }
+  r2_sunat_access_key_id: { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_sunat_access_key_id' }
+  r2_sunat_secret_access_key:
+    { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_sunat_secret_access_key' }
