@@ -3,7 +3,7 @@ name: billing-platform-ci
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, develop]
 
 permissions:
   contents: read
