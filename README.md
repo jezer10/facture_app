@@ -11,6 +11,24 @@ través de BullMQ.
 > oficiales de SUNAT antes de habilitar producción; el health productivo falla
 > cerrado mientras eso no ocurra.
 
+## Propiedad de la facturación
+
+Este backend concentra la responsabilidad fiscal del conjunto `wpp`.
+`sndr/back` conserva empresas/membresías de WhatsApp y mensajería; su implementación
+fiscal se retira. El [plan de corte](../back/INVOICES_GUIDE.md) describe los cambios
+de contrato y la preservación de los datos históricos.
+
+Para importar las facturas recibidas antiguas, usa el
+[migrador histórico](scripts/legacy-migration/README.md):
+
+```bash
+pnpm migration:legacy --mapping /ruta/segura/legacy-tenant-mapping.json --skip-local
+```
+
+El comando es dry-run por defecto. Requiere las conexiones de origen/destino y un
+mapa de empresas a emisores; agregar `--apply` importa los artefactos verificados.
+No migra credenciales SOL ni borra datos del backend anterior.
+
 ## Arquitectura
 
 - `billing-api`: autenticación JWT/API key y API `/api/v1`.
@@ -183,6 +201,18 @@ curl -X POST http://localhost:3300/api/v1/received-document-syncs \
 El progreso se consulta en `GET /api/v1/received-document-syncs/:syncId`. Los
 documentos importados se listan en `GET /api/v1/received-documents` y cada recurso
 se consulta en `GET /api/v1/received-documents/:documentId`.
+
+Los PDF y JSON importados del backend antiguo se descargan con `received:read` y
+acceso al emisor mediante URLs firmadas temporales:
+
+```text
+GET /api/v1/received-documents/:documentId/artifacts/pdf
+GET /api/v1/received-documents/:documentId/artifacts/canonical-json
+```
+
+`source` es un alias de `canonical-json`. Si el artefacto no existe se devuelve
+`404`; esta ruta descarga archivos almacenados, no genera ni emite comprobantes.
+
 
 ## Eventos webhook
 

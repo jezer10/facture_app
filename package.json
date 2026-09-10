@@ -34,7 +34,9 @@
     "migration:run:all": "pnpm migration:run:core && pnpm migration:run:sunat && pnpm migration:run:webhooks",
     "audit:no-secrets": "node scripts/audit-secrets.mjs",
     "audit:no-python": "node scripts/audit-python.mjs",
-    "smoke:mock": "node scripts/run-mock-smoke.mjs"
+    "smoke:mock": "node scripts/run-mock-smoke.mjs",
+    "migration:legacy": "node -r ts-node/register scripts/legacy-migration/cli.ts",
+    "test:legacy-migration": "jest --runInBand --testMatch \"<rootDir>/scripts/legacy-migration/**/*.spec.ts\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1116.0",

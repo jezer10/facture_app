@@ -1,6 +1,22 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
-import { CurrentPrincipal, ReceivedDocumentsService, RequireScopes } from '@app/fiscal-core';
+import {
+  CurrentPrincipal,
+  ReceivedDocumentsService,
+  ReceivedArtifactsService,
+  RequireScopes,
+} from '@app/fiscal-core';
 import type {
   AuthenticatedRequest,
   BillingPrincipal,
@@ -11,7 +27,20 @@ import { ListReceivedDocumentsQuery, RequestReceivedSyncDto } from './received.d
 
 @Controller()
 export class ReceivedController {
-  constructor(private readonly receivedDocuments: ReceivedDocumentsService) {}
+  constructor(
+    private readonly receivedDocuments: ReceivedDocumentsService,
+    private readonly artifacts: ReceivedArtifactsService,
+  ) {}
+
+  @Get('received-documents/:documentId/artifacts/:kind')
+  @RequireScopes('received:read')
+  getArtifact(
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+    @Param('kind') kind: string,
+    @CurrentPrincipal() principal: BillingPrincipal,
+  ): Promise<{ url: string; expiresInSeconds: number }> {
+    return this.artifacts.createSignedUrl(principal, documentId, kind);
+  }
 
   @Post('received-document-syncs')
   @HttpCode(202)

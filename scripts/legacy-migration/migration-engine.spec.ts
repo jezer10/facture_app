@@ -52,6 +52,28 @@ describe('LegacyMigrationEngine', () => {
     expect(report.safety).toEqual({ secretsEmitted: false, sourceDeletes: 0 });
   });
 
+  it('imports historical invoices alongside WhatsApp companies without fiscal credentials', async () => {
+    const fixture = createFixture();
+    const existing = await fixture.source.listCompanies();
+    jest
+      .spyOn(fixture.source, 'listCompanies')
+      .mockResolvedValue([
+        ...existing,
+        {
+          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          recipientRuc: '20999999999',
+          companyPassword: null,
+          clientSecret: null,
+          accessToken: null,
+        },
+      ]);
+    const report = await fixture.engine.run();
+    expect(report.status).toBe('completed');
+    expect(report.documents.wouldImport).toBe(1);
+    expect(report.artifacts.wouldCopy).toBe(2);
+    expect(fixture.destination.persisted).toHaveLength(0);
+  });
+
   it('copies and verifies every object before atomically persisting metadata', async () => {
     const fixture = createFixture();
 

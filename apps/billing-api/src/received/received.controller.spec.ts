@@ -4,6 +4,7 @@ import type {
   AuthenticatedRequest,
   BillingPrincipal,
   ReceivedDocumentsService,
+  ReceivedArtifactsService,
 } from '@app/fiscal-core';
 
 import { ReceivedController } from './received.controller';
@@ -16,7 +17,10 @@ describe('ReceivedController', () => {
     const service = {
       requestSync: jest.fn().mockResolvedValue({ id: 'sync-id' }),
     };
-    const controller = new ReceivedController(service as unknown as ReceivedDocumentsService);
+    const controller = new ReceivedController(
+      service as unknown as ReceivedDocumentsService,
+      {} as ReceivedArtifactsService,
+    );
     const principal = {
       kind: 'service',
       organizationId: '22222222-2222-4222-8222-222222222222',
