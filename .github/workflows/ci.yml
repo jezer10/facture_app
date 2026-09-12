@@ -31,5 +31,6 @@ jobs:
       - run: pnpm test:legacy-migration
       - run: pnpm build
       - run: pnpm audit --prod
+      - run: pnpm audit --dev
       - run: pnpm audit:no-secrets
       - run: pnpm audit:no-python
