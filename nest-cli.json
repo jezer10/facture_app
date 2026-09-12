@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "monorepo": true,
+  "root": "apps/billing-api",
+  "sourceRoot": "apps/billing-api/src",
+  "compilerOptions": {
+    "deleteOutDir": false,
+    "webpack": true,
+    "tsConfigPath": "apps/billing-api/tsconfig.app.json"
+  },
+  "projects": {
+    "billing-api": {
+      "type": "application",
+      "root": "apps/billing-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/billing-api/src",
+      "compilerOptions": { "tsConfigPath": "apps/billing-api/tsconfig.app.json" }
+    },
+    "billing-worker": {
+      "type": "application",
+      "root": "apps/billing-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/billing-worker/src",
+      "compilerOptions": { "tsConfigPath": "apps/billing-worker/tsconfig.app.json" }
+    },
+    "sunat-service": {
+      "type": "application",
+      "root": "apps/sunat-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/sunat-service/src",
+      "compilerOptions": { "tsConfigPath": "apps/sunat-service/tsconfig.app.json" }
+    },
+    "webhook-service": {
+      "type": "application",
+      "root": "apps/webhook-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/webhook-service/src",
+      "compilerOptions": { "tsConfigPath": "apps/webhook-service/tsconfig.app.json" }
+    }
+  }
+}

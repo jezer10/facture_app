@@ -1,0 +1,36 @@
+name: billing-platform-ci
+
+on:
+  pull_request:
+  push:
+    branches: [master, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test --ci
+      - run: pnpm test:legacy-migration
+      - run: pnpm build
+      - run: pnpm audit --prod
+      - run: pnpm audit --dev
+      - run: pnpm audit:no-secrets
+      - run: pnpm audit:no-python
