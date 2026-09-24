@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* .resume-table tr {
+        border-bottom: 1px solid black;
+      } */
+      .info-table tr td:first-child {
+        white-space: nowrap;
+      }
+
+      .resume-table tr td:first-child {
+        text-align: right;
+      }
+      .resume-table tr td:last-child {
+        width: 100px;
+        text-align: right;
+        border: 1px solid black;
+        padding: 2px 4px;
+      }
+    </style>
+  </head>
+
+  <body class="p-2">
+    <div class="border-2 border-black divide-y">
+      <div class="flex items-center gap-4 p-2">
+        <div class="w-1/2">
+          <h1 class="font-bold">{{issuer.comercial_name}}</h1>
+          <h2 class="font-bold">{{issuer.name}}</h2>
+          <p>{{issuer.address}}</p>
+          <p>{{issuer.location}}</p>
+        </div>
+        <div class="w-1/2">
+          <div class="border-2 border-black font-bold text-center">
+            <h1>FACTURA ELECTRÓNICA</h1>
+            <h2>RUC: {{issuer.ruc}}</h2>
+            <p>{{serial_number}}-{{document_number}}</p>
+          </div>
+        </div>
+      </div>
+      <div class="p-2">
+        <div class="flex text-xs">
+          <div class="w-1/2">
+            <table class="info-table w-full border-separate">
+              <tr>
+                <td>Fecha de emisión</td>
+                <td>:</td>
+                <td>{{issue_date}}</td>
+              </tr>
+              <tr>
+                <td>Señor(es)</td>
+                <td>:</td>
+                <td>{{receiver.name}}</td>
+              </tr>
+              <tr>
+                <td>RUC</td>
+                <td>:</td>
+                <td>{{receiver.ruc}}</td>
+              </tr>
+              <tr>
+                <td>Dirección del Cliente</td>
+                <td>:</td>
+                <td>{{receiver.address}}</td>
+              </tr>
+              <tr>
+                <td>Tipo de Moneda</td>
+                <td>:</td>
+                <td>SOL</td>
+              </tr>
+              <tr>
+                <td>Observación</td>
+                <td>:</td>
+                <td>{{comment}}</td>
+              </tr>
+            </table>
+          </div>
+          <div class="w-1/2">
+            <p><span>Forma de pago:</span> <span>Contado</span></p>
+          </div>
+        </div>
+      </div>
+      <div class="p-2">
+        <table class="w-full text-xs border border-black">
+          <thead class="border-b border-b-black">
+            <tr>
+              <th>Cantidad</th>
+              <th>Unidad Medida</th>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Valor Unitario</th>
+              <th>ICBPER</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            <tr class="text-center">
+              <td>{{item.quantity}}</td>
+              <td>{{item.measure}}</td>
+              <td>{{item.code}}</td>
+              <td>{{item.description}}</td>
+              <td>{{item.unit_value}}</td>
+              <td>{{item.icbper}}</td>
+            </tr>
+            {% endfor %}
+
+          </tbody>
+        </table>
+      </div>
+      <div class="flex flex-col gap-2 p-2">
+        <div class="flex">
+          <div class="w-1/2 text-xs flex flex-col gap-2 justify-center">
+            <p class="font-bold">SON:{{total_amount_text}}</p>
+            <div>
+              <p>* DESCUENTO GLOBAL que afecta la base imponible del IGV</p>
+              <p>** DESCUENTO GLOBAL que no afecta la base imponible del IGV</p>
+            </div>
+          </div>
+          <div class="w-1/2 border border-black">
+            <table class="resume-table text-xs w-full border-separate">
+              <tr>
+                <td>Descuento Global*</td>
+                <td>:</td>
+                <td>S/ {{summary.global_affected_discount}}</td>
+              </tr>
+              <tr>
+                <td>Total valor venta gravado</td>
+                <td>:</td>
+                <td>S/ {{summary.total_taxed_sales_value}}</td>
+              </tr>
+              <tr>
+                <td>Total valor venta inafecto</td>
+                <td>:</td>
+                <td>S/ {{summary.total_unaffected_sales_value}}</td>
+              </tr>
+              <tr>
+                <td>Total valor venta exonerado</td>
+                <td>:</td>
+                <td>S/ {{summary.total_exonerated_sales_value}}</td>
+              </tr>
+              <tr>
+                <td>Total valor venta gratuito</td>
+                <td>:</td>
+                <td>S/ {{summary.total_free_sales_value}}</td>
+              </tr>
+              <tr>
+                <td>Total valor venta exportación</td>
+                <td>:</td>
+                <td>S/ {{summary.total_exportation_sales_value}}</td>
+              </tr>
+              <tr>
+                <td>Descuento global **</td>
+                <td>:</td>
+                <td>S/ {{summary.global_unaffected_discount}}</td>
+              </tr>
+              <tr>
+                <td>Total descuentos</td>
+                <td>:</td>
+                <td>S/ {{summary.total_discount}}</td>
+              </tr>
+              <tr>
+                <td>Sumatoria otros tributos</td>
+                <td>:</td>
+                <td>S/ {{summary.other_taxes_addition}}</td>
+              </tr>
+              <tr>
+                <td>Sumatoria otros cargos</td>
+                <td>:</td>
+                <td>S/ {{summary.other_charges_addition}}</td>
+              </tr>
+              <tr>
+                <td>Sumatoria ISC</td>
+                <td>:</td>
+                <td>S/ {{summary.isc_addition}}</td>
+              </tr>
+              <tr>
+                <td>Sumatoria IGV</td>
+                <td>:</td>
+                <td>S/ {{summary.igv_addition}}</td>
+              </tr>
+              <tr>
+                <td>Sumatoria ICBPER</td>
+                <td>:</td>
+                <td>S/ {{summary.icbper_addition}}</td>
+              </tr>
+              <tr>
+                <td>Monto total del anticipo</td>
+                <td>:</td>
+                <td>S/ {{summary.total_advance_amount}}</td>
+              </tr>
+              <tr>
+                <td>Monto de Redondeo</td>
+                <td>:</td>
+                <td>S/ {{summary.rounded_amount}}</td>
+              </tr>
+              <tr>
+                <td>Importe total</td>
+                <td>:</td>
+                <td>S/ {{summary.total}}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+        {% for item in detraction %}
+        <div class="w-full border border-black p-2 text-xs">
+          <p class="font-bold">Información de la detracción</p>
+          <table class="w-full">
+            <tr>
+              <td>Leyenda:</td>
+              <td>{{item.label}}</td>
+            </tr>
+            <tr>
+              <td>Bien o Servicio:</td>
+              <td>{{item.service}}</td>
+            </tr>
+            <tr>
+              <td>Medio Pago:</td>
+              <td>{{item.payment_method}}</td>
+            </tr>
+            <tr>
+              <td>Nro. Cta. Banco de la Nación:</td>
+              <td>{{item.account_number}}</td>
+              <td>Porcentaje de detracción:</td>
+              <td>{{item.percentage}}</td>
+              <td>Monto detracción:</td>
+              <td>S/ {{item.amount}}</td>
+            </tr>
+          </table>
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+  </body>
+</html>

@@ -50,7 +50,56 @@ con AOF y `noeviction`; R2 es privado y usa object keys inmutables.
 - Un bucket R2 privado y credenciales distintas de mínimo privilegio para API,
   worker y SUNAT.
 
-## Inicio local seguro
+## Desarrollo completamente local (MinIO)
+
+Con Node.js 24, pnpm y Docker en ejecución:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev:local
+```
+
+El comando genera secretos privados sin sobrescribir los existentes, inicia
+PostgreSQL, Redis y MinIO en Docker, crea el bucket privado, aplica las migraciones,
+instala Chromium para los PDF, compila y ejecuta los cuatro servicios con Node.js.
+SUNAT funciona en modo simulado; las bases de datos, colas y archivos son locales
+y persistentes. No requiere credenciales R2 ni realiza envíos fiscales reales.
+
+| Servicio          | Dirección                                 |
+| ----------------- | ----------------------------------------- |
+| API / Swagger     | http://localhost:3300/api/docs            |
+| Estado de la API  | http://localhost:3300/api/v1/health/ready |
+| Consola MinIO     | http://localhost:59001                    |
+| Endpoint S3 MinIO | http://127.0.0.1:59000                    |
+| PostgreSQL        | 127.0.0.1:54330                           |
+| Redis             | 127.0.0.1:56379                           |
+
+El usuario y contraseña de MinIO están en `deploy/secrets/local/minio_access_key`
+y `deploy/secrets/local/minio_secret_key`. Sólo para este entorno local, los
+servicios usan estas mismas credenciales. PostgreSQL conserva las tres bases
+`billing_core`, `billing_sunat` y `billing_delivery`, con sus usuarios separados;
+sus contraseñas están en los archivos `*_db_password` del mismo directorio.
+Los servicios internos usan los puertos 3301, 3302 y 3303.
+
+En otra terminal, `pnpm smoke:mock` verifica la emisión simulada y los artefactos.
+`Ctrl+C` detiene las aplicaciones; `pnpm local:stop` detiene los contenedores sin
+borrar los datos. Vuelve a ejecutar `pnpm dev:local` para arrancar y recompilar.
+La configuración local está en `compose.local.yaml` y `scripts/start-local.mjs`.
+
+## Prueba de conexión con SUNAT beta
+
+El [piloto beta](scripts/sunat-beta/README.md) prepara una factura de prueba por un
+servicio web, firma el XML y permite un envío al servicio oficial beta:
+
+```bash
+pnpm sunat:beta --config scripts/sunat-beta/example.json
+```
+
+Este comando sólo prepara archivos por defecto. Consulta la guía para usar tus
+datos y enviar con `--send`. La API continúa en modo mock y producción sigue
+bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
+
+## Inicio con R2
 
 1. Genera secretos locales; el script no sobrescribe archivos existentes:
 
@@ -212,7 +261,6 @@ GET /api/v1/received-documents/:documentId/artifacts/canonical-json
 
 `source` es un alias de `canonical-json`. Si el artefacto no existe se devuelve
 `404`; esta ruta descarga archivos almacenados, no genera ni emite comprobantes.
-
 
 ## Eventos webhook
 

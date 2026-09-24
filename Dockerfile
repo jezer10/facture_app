@@ -21,9 +21,11 @@ RUN --mount=type=cache,id=pnpm-prod,target=/pnpm/store pnpm install --prod --fro
 
 FROM runtime-dependencies AS runtime
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/assets ./src/assets
 USER node
 
 FROM runtime-dependencies AS runtime-worker
+COPY --from=build /app/src/assets ./src/assets
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN pnpm exec playwright install --with-deps --only-shell chromium
 COPY --from=build /app/dist ./dist
