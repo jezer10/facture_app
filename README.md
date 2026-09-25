@@ -322,4 +322,4 @@ en [la guía de SQS](deploy/sqs/README.md).
 ## Despliegue automático de beta
 
 Consulta [la guía del servidor y CI/CD](deploy/server/README.md). Los push a
-`develop` despliegan en Ubuntu ARM64 después de pasar CI; SUNAT sigue en beta.
+`master` despliegan en Ubuntu ARM64 después de pasar CI; SUNAT sigue en beta.

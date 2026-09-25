@@ -12,10 +12,10 @@ selecciona explícitamente beta y no debe utilizarse para emisión real.
 
 ## Pipeline
 
-Cada push a `develop` ejecuta validaciones y pruebas; sólo si pasan, construye
+Cada push a `master` ejecuta validaciones y pruebas; sólo si pasan, construye
 imágenes ARM64 `runtime`, `runtime-worker` y `migrations` en GHCR, etiquetadas con
 el SHA del commit. Luego las despliega por SSH desde el entorno GitHub `beta`.
-Los PR y `master` sólo ejecutan validaciones. No hay despliegue fiscal productivo.
+Los PR y `develop` sólo ejecutan validaciones. No hay despliegue fiscal productivo.
 
 Secretos GitHub del entorno `beta`: `DEPLOY_SSH_KEY` (clave dedicada) y
 `DEPLOY_KNOWN_HOSTS` (identidad SSH verificada). Variable: `DEPLOY_HOST`.
@@ -53,7 +53,7 @@ servicio; no se concedió KMS porque estas colas usan SSE-SQS.
    `r2_worker_secret_access_key`, `r2_sunat_access_key_id`, `r2_sunat_secret_access_key`.
 4. Configurar el túnel remoto hacia `http://billing-api:3000`, su token y el CNAME
    de la API. Verificar que `172.31.250.0/24` no choque con otras redes del host.
-5. Preparar el entorno GitHub `beta` y hacer push a `develop`. Comprobar el job
+5. Preparar el entorno GitHub `beta` y hacer push a `master`. Comprobar el job
    completo y hacer una emisión beta antes de dar la instalación por terminada.
 
 ## Operación y recuperación

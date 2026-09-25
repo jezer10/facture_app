@@ -37,7 +37,7 @@ jobs:
       - run: pnpm audit:no-python
 
   images:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: verify
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
@@ -67,7 +67,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
 
   deploy-beta:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: images
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -92,7 +92,7 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
       - name: Check release is still the branch head
-        run: test "$(git ls-remote origin refs/heads/develop | cut -f1)" = "$GITHUB_SHA"
+        run: test "$(git ls-remote origin refs/heads/master | cut -f1)" = "$GITHUB_SHA"
       - name: Upload release
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
