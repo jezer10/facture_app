@@ -1,0 +1,10 @@
+{
+  "environment": "beta",
+  "issuer": { "ruc": "20100066603", "legalName": "EMISOR DE EJEMPLO BETA" },
+  "customer": { "ruc": "20100070970", "legalName": "CLIENTE DE EJEMPLO BETA" },
+  "series": "FB01",
+  "number": "1",
+  "issueDate": "2026-09-24",
+  "description": "Servicio de diseño y desarrollo de página web informativa - PRUEBA BETA",
+  "netAmount": "100.00"
+}

@@ -1,0 +1,7 @@
+services:
+  sunat-service:
+    environment:
+      NODE_ENV: development
+      SUNAT_PROVIDER_MODE: mock
+      ALLOW_VOLATILE_ADAPTERS: 'true'
+      SUNAT_MOCK_ALLOW_ANY_ISSUER: 'true'
