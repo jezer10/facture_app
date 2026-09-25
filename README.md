@@ -5,8 +5,9 @@ varios servicios internos. La API pública es asíncrona: registra el documento 
 correlativo en PostgreSQL, responde `202`, y procesa SUNAT, artefactos y webhooks a
 través de BullMQ.
 
-> **Estado fiscal:** el flujo distribuido y el proveedor mock están operativos para
-> pruebas, pero el envío real permanece bloqueado de forma intencional. La firma
+> **Estado fiscal:** el flujo distribuido funciona con simulador y con SUNAT beta
+> para facturas simples; incluye PDF y correo local. La emisión fiscal productiva
+> permanece bloqueada de forma intencional. La firma
 > XMLDSig y el transporte SOAP/ZIP/CDR deben validarse con certificados y fixtures
 > oficiales de SUNAT antes de habilitar producción; el health productivo falla
 > cerrado mientras eso no ocurra.
@@ -96,7 +97,8 @@ pnpm sunat:beta --config scripts/sunat-beta/example.json
 ```
 
 Este comando sólo prepara archivos por defecto. Consulta la guía para usar tus
-datos y enviar con `--send`. La API continúa en modo mock y producción sigue
+datos y enviar con `--send`. La API usa el simulador con `pnpm dev:local` y SUNAT
+beta con `SUNAT_BETA_ISSUER_RUC=20615234762 pnpm dev:beta`. Producción sigue
 bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
 
 ## Inicio con R2
@@ -305,3 +307,6 @@ No se debe apuntar una prueba de carga al endpoint beta SUNAT.
 - La importación heredada es dry-run por defecto, verifica hashes y nunca borra la
   fuente. El PDF local huérfano queda reportado para cuarentena, no se convierte en
   un comprobante fiscal.
+
+Para probar el flujo completo API → SUNAT beta → PDF → correo local, consulta
+[API beta y Mailpit](scripts/sunat-beta/README.md#api-distribuida-y-correo-local).

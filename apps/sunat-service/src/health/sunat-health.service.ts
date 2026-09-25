@@ -72,7 +72,7 @@ export class SunatHealthService {
       ]);
     const signer = this.signer.readiness();
     const productionCapable =
-      provider.environment !== 'mock' &&
+      provider.environment === 'production' &&
       signer.mode === 'signed' &&
       credentials.durable &&
       payloadStore.durable &&

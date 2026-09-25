@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { spawn, execFileSync } from 'node:child_process';
+import { randomBytes, X509Certificate } from 'node:crypto';
+import { readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { CreateBucketCommand, HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
@@ -35,6 +35,10 @@ function run(command, args, env = process.env) {
 }
 
 async function main() {
+  const beta = process.argv.includes('--beta');
+  const betaRuc = process.env.SUNAT_BETA_ISSUER_RUC;
+  if (beta && !/^20\d{9}$/u.test(betaRuc ?? ''))
+    throw new Error('Set SUNAT_BETA_ISSUER_RUC to the issuer RUC for beta.');
   await run('sh', ['scripts/generate-development-secrets.sh']);
   for (const [name, bytes] of [
     ['minio_access_key', 16],
@@ -47,6 +51,36 @@ async function main() {
       });
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
+    }
+  }
+  if (beta) {
+    const cert = secret('beta_certificate.pem');
+    if (
+      !existsSync(cert) ||
+      !existsSync(secret('beta_private.key')) ||
+      Date.parse(new X509Certificate(readFileSync(cert)).validTo) < Date.now() + 86400000
+    ) {
+      execFileSync(
+        'openssl',
+        [
+          'req',
+          '-x509',
+          '-newkey',
+          'rsa:2048',
+          '-sha256',
+          '-nodes',
+          '-days',
+          '30',
+          '-subj',
+          '/CN=FACTURE BETA ONLY/O=TEST CERTIFICATE',
+          '-keyout',
+          secret('beta_private.key'),
+          '-out',
+          cert,
+        ],
+        { stdio: 'pipe' },
+      );
+      chmodSync(secret('beta_private.key'), 0o600);
     }
   }
   await run('docker', [
@@ -88,7 +122,15 @@ async function main() {
     BILLING_API_KEY_REPLAY_KEY_FILE: secret('api_key_replay_key'),
     SUNAT_INTERNAL_SERVICE_SECRET_FILE: secret('sunat_internal_secret'),
     WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: secret('webhook_internal_secret'),
-    SUNAT_PROVIDER_MODE: 'mock',
+    SUNAT_PROVIDER_MODE: beta ? 'beta' : 'mock',
+    BILLING_EMAIL_MODE: beta ? 'mailpit' : 'disabled',
+    ...(beta
+      ? {
+          SUNAT_BETA_ISSUER_RUC: betaRuc,
+          SUNAT_BETA_KEY_FILE: secret('beta_private.key'),
+          SUNAT_BETA_CERT_FILE: secret('beta_certificate.pem'),
+        }
+      : {}),
     SUNAT_MOCK_ALLOW_ANY_ISSUER: 'true',
     R2_ENDPOINT: 'http://127.0.0.1:59000',
     R2_REGION: 'us-east-1',
@@ -146,6 +188,7 @@ async function main() {
       },
     ],
   ];
+  if (beta) console.log('SUNAT BETA - SIN VALIDEZ FISCAL. Correo local: http://localhost:58025');
   console.log(
     'Starting local services. API: http://localhost:3300/api/docs | MinIO: http://localhost:59001',
   );

@@ -272,7 +272,9 @@ export class SunatCommandExecutor {
     const startedAt = this.now();
 
     try {
-      const outcome = await this.dependencies.provider.submitDocument(signedDocument, credentials);
+      const outcome = await this.dependencies.provider.submitDocument(signedDocument, credentials, {
+        organizationId: command.organizationId,
+      });
       await this.recordSubmissionOutcome(
         submission.submissionId,
         context.attempt,
@@ -455,7 +457,7 @@ export class SunatCommandExecutor {
           outcome.providerTrackingId ?? localSubmissionId(toFiscalDocumentIdentity(snapshot)),
         code: outcome.responseCode,
         description: outcome.description,
-        artifacts,
+        artifacts: [...artifacts, ...(outcome.artifacts ?? [])],
       };
       return {
         result: await this.buildResultEnvelope(
@@ -471,7 +473,7 @@ export class SunatCommandExecutor {
       submissionId: outcome.providerTrackingId,
       acceptedAt: this.now().toISOString(),
       observationCodes: outcome.observations,
-      artifacts,
+      artifacts: [...artifacts, ...(outcome.artifacts ?? [])],
     };
     return {
       result: await this.buildResultEnvelope(command, 'sunat.document.accepted.v1', resultPayload),
@@ -493,7 +495,7 @@ export class SunatCommandExecutor {
         submissionId,
         code: outcome.responseCode,
         description: outcome.description,
-        artifacts: [],
+        artifacts: outcome.artifacts ?? [],
       };
       return {
         result: await this.buildResultEnvelope(command, 'sunat.document.rejected.v1', payload),
@@ -504,7 +506,7 @@ export class SunatCommandExecutor {
       submissionId,
       acceptedAt: this.now().toISOString(),
       observationCodes: outcome.observations,
-      artifacts: [],
+      artifacts: outcome.artifacts ?? [],
     };
     return {
       result: await this.buildResultEnvelope(command, 'sunat.document.accepted.v1', payload),
@@ -689,6 +691,15 @@ export class SunatCommandExecutor {
     }
     const providerTrackingId =
       submission.providerTrackingId ?? localSubmissionId(toFiscalDocumentIdentity(snapshot));
+    if (this.dependencies.provider.storedArtifacts) {
+      artifacts = [
+        ...artifacts,
+        ...(await this.dependencies.provider.storedArtifacts(
+          toFiscalDocumentIdentity(snapshot),
+          await this.dependencies.credentials.resolve(command.issuerId),
+        )),
+      ];
+    }
     if (submission.status === 'rejected') {
       const payload: RejectedDocumentResultPayload = {
         documentId: snapshot.documentId,

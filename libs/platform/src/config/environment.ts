@@ -93,7 +93,14 @@ const environmentSchema = z
     R2_SECRET_ACCESS_KEY_FILE: z.string().min(1).optional(),
     R2_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
     ALLOW_VOLATILE_ADAPTERS: booleanFromString,
-    SUNAT_PROVIDER_MODE: z.enum(['mock', 'production']).default('mock'),
+    SUNAT_PROVIDER_MODE: z.enum(['mock', 'beta', 'production']).default('mock'),
+    SUNAT_BETA_ISSUER_RUC: z
+      .string()
+      .regex(/^20\d{9}$/u)
+      .optional(),
+    SUNAT_BETA_KEY_FILE: z.string().optional(),
+    SUNAT_BETA_CERT_FILE: z.string().optional(),
+    BILLING_EMAIL_MODE: z.enum(['disabled', 'mailpit']).default('disabled'),
     SUNAT_ENVIRONMENT: z.enum(['beta', 'production']).default('production'),
     SUNAT_BILL_SERVICE_URL: z.url().optional(),
     SUNAT_CONSULT_SERVICE_URL: z.url().optional(),
@@ -105,6 +112,13 @@ const environmentSchema = z
   .superRefine((environment, context) => {
     if (environment.NODE_ENV !== 'production') {
       return;
+    }
+    if (environment.BILLING_EMAIL_MODE !== 'disabled') {
+      context.addIssue({
+        code: 'custom',
+        path: ['BILLING_EMAIL_MODE'],
+        message: 'Mailpit is restricted to development',
+      });
     }
 
     const secretsByService = {

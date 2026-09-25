@@ -22,6 +22,29 @@ export class DocumentArtifactsService {
     @Inject(OBJECT_STORAGE_PORT) private readonly storage: ObjectStoragePort,
   ) {}
 
+  // The controller first authorizes document access through FiscalDocumentsService.
+  async emailDelivery(documentId: string): Promise<Record<string, unknown>> {
+    const [delivery] = await this.dataSource.query<Record<string, unknown>[]>(
+      `SELECT status, recipient, attempts, sent_at AS "sentAt", error_code AS "errorCode"
+       FROM document_email_deliveries WHERE document_id=$1`,
+      [documentId],
+    );
+    if (delivery) return { ...delivery, channel: 'mailpit-local' };
+    const [document] = await this.dataSource.query<{ recipient: string | null }[]>(
+      `SELECT fiscal_snapshot->'customer'->>'email' AS recipient FROM fiscal_documents WHERE id=$1`,
+      [documentId],
+    );
+    return {
+      status:
+        parseEnvironment(process.env).BILLING_EMAIL_MODE === 'disabled'
+          ? 'disabled'
+          : document?.recipient
+            ? 'waiting_for_artifacts'
+            : 'not_requested',
+      channel: 'mailpit-local',
+    };
+  }
+
   async createSignedUrl(
     principal: BillingPrincipal,
     documentId: string,

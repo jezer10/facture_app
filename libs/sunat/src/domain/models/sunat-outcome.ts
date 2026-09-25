@@ -1,4 +1,5 @@
 import type { FiscalDocumentIdentity, ReceivedDocumentDescriptor } from './fiscal-document';
+import type { StoredSunatArtifact } from '../ports/sunat-artifact-store.port';
 
 export type SunatProviderEnvironment = 'mock' | 'beta' | 'production';
 
@@ -37,6 +38,7 @@ export type SunatSubmissionOutcome =
       description: string;
       observations: string[];
       cdrReference: string | null;
+      artifacts?: readonly StoredSunatArtifact[];
     }
   | {
       status: 'rejected';
@@ -45,6 +47,7 @@ export type SunatSubmissionOutcome =
       description: string;
       observations: string[];
       cdrReference: string | null;
+      artifacts?: readonly StoredSunatArtifact[];
     }
   | {
       status: 'pending';

@@ -2,7 +2,7 @@ import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/co
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { PublicRoute } from '@app/fiscal-core';
-import { OBJECT_STORAGE_PORT } from '@app/platform';
+import { OBJECT_STORAGE_PORT, parseEnvironment } from '@app/platform';
 import type { ObjectStoragePort } from '@app/platform';
 
 @Controller('health')
@@ -12,6 +12,12 @@ export class HealthController {
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(OBJECT_STORAGE_PORT) private readonly storage: ObjectStoragePort,
   ) {}
+
+  @Get('mode')
+  mode(): { sunat: string; email: string; fiscalValidity: boolean } {
+    const env = parseEnvironment(process.env);
+    return { sunat: env.SUNAT_PROVIDER_MODE, email: env.BILLING_EMAIL_MODE, fiscalValidity: false };
+  }
 
   @Get('live')
   live(): { status: 'ok' } {

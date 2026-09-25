@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { parseEnvironment } from '@app/platform';
 
 import type { CreateFiscalDocumentInput, FiscalDocumentLineInput } from '@app/contracts';
 import {
@@ -701,6 +702,9 @@ function buildSnapshots(
   const lines = calculated.lines.map((line, index) => buildLineSnapshot(input.lines[index]!, line));
   const totals = totalsRecord(calculated);
   const fiscalContent = {
+    ...(parseEnvironment(process.env).SUNAT_PROVIDER_MODE === 'beta'
+      ? { environment: 'beta' }
+      : {}),
     currency: input.currency,
     customer,
     documentType: input.documentType,

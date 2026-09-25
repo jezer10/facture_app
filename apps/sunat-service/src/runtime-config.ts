@@ -22,7 +22,7 @@ export function sunatMockAllowAnyIssuer(): boolean {
   return true;
 }
 
-export function sunatProviderMode(): 'mock' | 'production' {
+export function sunatProviderMode(): 'mock' | 'beta' | 'production' {
   return environment().SUNAT_PROVIDER_MODE;
 }
 

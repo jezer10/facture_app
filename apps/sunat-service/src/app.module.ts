@@ -26,7 +26,9 @@ const sunatDomainModule =
         allowAnyIssuer: sunatMockAllowAnyIssuer(),
         issuerIds: sunatMockIssuerIds(),
       })
-    : SunatModule.forProduction();
+    : sunatProviderMode() === 'beta'
+      ? SunatModule.forBeta()
+      : SunatModule.forProduction();
 
 @Module({
   imports: [

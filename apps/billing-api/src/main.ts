@@ -31,6 +31,11 @@ async function bootstrap(): Promise<void> {
   if (environment.NODE_ENV !== 'production') {
     const swagger = new DocumentBuilder()
       .setTitle('Facture App Billing API')
+      .setDescription(
+        environment.SUNAT_PROVIDER_MODE === 'beta'
+          ? 'SUNAT BETA: sin validez fiscal. Factura PEN, una línea gravada al 18%, cantidad 1, sin descuentos, RUC autorizado. Correo de prueba capturado en Mailpit.'
+          : 'API de facturación',
+      )
       .setVersion('1.0')
       .addBearerAuth()
       .addApiKey({ type: 'apiKey', name: 'Authorization', in: 'header' }, 'api-key')

@@ -84,6 +84,17 @@ export class FiscalDocumentsController {
     return this.documents.get(toDocumentsPrincipal(principal, request), documentId);
   }
 
+  @Get(':documentId/email-delivery')
+  @RequireScopes('documents:read')
+  async emailDelivery(
+    @Param('documentId') documentId: string,
+    @CurrentPrincipal() principal: BillingPrincipal,
+    @Req() request: Request,
+  ): Promise<Record<string, unknown>> {
+    await this.documents.get(toDocumentsPrincipal(principal, request), documentId);
+    return this.artifacts.emailDelivery(documentId);
+  }
+
   @Post(':documentId/void-requests')
   @HttpCode(202)
   @RequireScopes('documents:write')

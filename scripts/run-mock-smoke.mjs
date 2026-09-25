@@ -1,13 +1,22 @@
 #!/usr/bin/env node
 
 import { createHmac } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 
+const beta = process.argv.includes('--beta');
+const configIndex = process.argv.indexOf('--config');
+if (beta && (configIndex < 0 || !process.argv[configIndex + 1]))
+  throw new Error('Use --beta --config <beta.json>');
+const betaConfig = beta
+  ? JSON.parse(readFileSync(process.argv[configIndex + 1] ?? '', 'utf8'))
+  : null;
+if (beta && (configIndex < 0 || betaConfig.environment !== 'beta'))
+  throw new Error('Use --beta --config <beta.json>');
 const apiUrl = withoutTrailingSlash(process.env.BILLING_API_URL ?? 'http://localhost:3300');
 const jwtSecretPath = process.env.BILLING_JWT_SECRET_FILE ?? 'deploy/secrets/local/jwt_secret';
 const subject = `local-smoke-${Date.now()}`;
 const suffix = String(Date.now()).slice(-8);
-const issuerRuc = peruvianRuc(`20${suffix}`);
+const issuerRuc = beta ? betaConfig.issuer.ruc : peruvianRuc(`20${suffix}`);
 const customerRuc = peruvianRuc(
   `20${String(Number(suffix) + 1)
     .padStart(8, '0')
@@ -15,6 +24,9 @@ const customerRuc = peruvianRuc(
 );
 const issueDate = limaDate(new Date());
 
+const actualMode = await fetch(`${apiUrl}/api/v1/health/mode`).then((r) => r.json());
+if (actualMode.sunat !== (beta ? 'beta' : 'mock'))
+  throw new Error('API mode does not match the requested smoke test.');
 const platformToken = createDevelopmentJwt(readSecret(jwtSecretPath), subject);
 const organization = await request('/api/v1/organizations', {
   method: 'POST',
@@ -31,14 +43,21 @@ const organizationToken = createDevelopmentJwt(readSecret(jwtSecretPath), subjec
 const issuer = await request('/api/v1/issuers', {
   method: 'POST',
   token: organizationToken,
-  body: { ruc: issuerRuc, legalName: `Smoke Emisor ${suffix} SAC` },
+  body: {
+    ruc: issuerRuc,
+    legalName: beta ? betaConfig.issuer.legalName : `Smoke Emisor ${suffix} SAC`,
+  },
 });
 const issuerId = requiredString(issuer, 'id');
 
 const series = await request(`/api/v1/issuers/${issuerId}/series`, {
   method: 'POST',
   token: organizationToken,
-  body: { documentType: '01', series: 'F001', nextNumber: 1 },
+  body: {
+    documentType: '01',
+    series: beta ? 'FAPI' : 'F001',
+    nextNumber: beta ? Number(suffix) : 1,
+  },
 });
 const seriesId = requiredString(series, 'id');
 
@@ -77,10 +96,13 @@ const accepted = await request('/api/v1/fiscal-documents', {
       identityType: '6',
       identityNumber: customerRuc,
       legalName: `Smoke Cliente ${suffix} SAC`,
+      ...(beta ? { email: 'cliente.beta@example.test' } : {}),
     },
     lines: [
       {
-        description: 'Servicio de prueba no fiscal',
+        description: beta
+          ? 'Desarrollo de pagina web - PRUEBA BETA'
+          : 'Servicio de prueba no fiscal',
         unitCode: 'NIU',
         quantity: '1',
         unitValue: '100.00',
@@ -91,6 +113,18 @@ const accepted = await request('/api/v1/fiscal-documents', {
   },
 });
 const documentId = requiredString(accepted, 'id');
+if (beta) {
+  mkdirSync('output/sunat-beta', { recursive: true });
+  writeFileSync(
+    'output/sunat-beta/api-access.json',
+    JSON.stringify(
+      { apiUrl, organizationId, issuerId, seriesId, serviceAccountId, apiKey, documentId },
+      null,
+      2,
+    ) + '\n',
+    { mode: 0o600 },
+  );
+}
 const terminalDocument = await pollDocument(documentId, apiKey);
 const finalStatus = requiredString(terminalDocument, 'status');
 if (!['accepted', 'accepted_with_observations'].includes(finalStatus)) {
@@ -100,18 +134,39 @@ if (!['accepted', 'accepted_with_observations'].includes(finalStatus)) {
 await pollArtifact(documentId, 'canonical-json', apiKey);
 await pollArtifact(documentId, 'xml', apiKey);
 await pollArtifact(documentId, 'pdf', apiKey);
+let emailDelivery;
+if (beta) {
+  await pollArtifact(documentId, 'signed-xml', apiKey);
+  await pollArtifact(documentId, 'zip', apiKey);
+  await pollArtifact(documentId, 'cdr', apiKey);
+  const deadline = Date.now() + 30000;
+  do {
+    emailDelivery = await request(`/api/v1/fiscal-documents/${documentId}/email-delivery`, {
+      method: 'GET',
+      apiKey,
+    });
+    if (emailDelivery.status === 'sent') break;
+    if (['failed', 'unconfirmed'].includes(emailDelivery.status))
+      throw new Error(`Email ${emailDelivery.status}`);
+    await delay(1000);
+  } while (Date.now() < deadline);
+  if (emailDelivery.status !== 'sent') throw new Error('Email not captured by Mailpit in time');
+}
 
 process.stdout.write(
   `${JSON.stringify(
     {
       ok: true,
-      mode: 'mock-no-fiscal-validity',
+      mode: beta ? 'api-sunat-beta-no-fiscal-validity' : 'mock-no-fiscal-validity',
+      ...(beta ? { emailDelivery } : {}),
       organizationId,
       issuerId,
       serviceAccountId,
       documentId,
       status: finalStatus,
-      artifactsVerified: ['canonical-json', 'xml', 'pdf'],
+      artifactsVerified: beta
+        ? ['canonical-json', 'xml', 'signed-xml', 'zip', 'cdr', 'pdf']
+        : ['canonical-json', 'xml', 'pdf'],
     },
     null,
     2,
@@ -185,9 +240,15 @@ function validateArtifact(kind, body) {
     validateJsonArtifact(body);
     return;
   }
-  if (kind === 'xml') {
+  if (kind === 'xml' || kind === 'signed-xml') {
     if (!body.toString('utf8').trimStart().startsWith('<')) {
       throw new Error('xml artifact does not start with an XML element');
+    }
+    return;
+  }
+  if (kind === 'zip' || kind === 'cdr') {
+    if (!body.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+      throw new Error(`${kind} artifact is not a ZIP file`);
     }
     return;
   }

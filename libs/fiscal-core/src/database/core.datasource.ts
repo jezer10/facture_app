@@ -8,6 +8,7 @@ import { AddCoreOutboxRetrying1787356860000 } from './migrations/202608220002-ad
 import { AddReceivedSyncIdempotency1787356920000 } from './migrations/202608220003-add-received-sync-idempotency';
 import { EnforceCoreTenantIsolation1787356980000 } from './migrations/202608220004-enforce-core-tenant-isolation';
 import { AddApiKeyCreationIdempotency1787357040000 } from './migrations/202608220005-add-api-key-creation-idempotency';
+import { AddDocumentEmail1790208000000 } from './migrations/202609240001-add-document-email';
 
 const environment = parseEnvironment(process.env);
 
@@ -24,6 +25,7 @@ export const coreDataSourceOptions = {
     AddReceivedSyncIdempotency1787356920000,
     EnforceCoreTenantIsolation1787356980000,
     AddApiKeyCreationIdempotency1787357040000,
+    AddDocumentEmail1790208000000,
   ],
   migrationsTableName: 'typeorm_migrations',
   migrationsRun: false,

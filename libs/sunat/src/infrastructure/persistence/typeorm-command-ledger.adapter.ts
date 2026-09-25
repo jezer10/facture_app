@@ -122,7 +122,7 @@ export class TypeOrmCommandLedgerAdapter implements SunatCommandLedgerPort<Compl
          ORDER BY delivery_available_at ASC, completed_at ASC
          FOR UPDATE SKIP LOCKED
          LIMIT $1
-       )
+       ), claimed AS (
        UPDATE command_inbox AS inbox
        SET delivery_status = 'publishing',
            delivery_attempts = delivery_attempts + 1,
@@ -130,7 +130,8 @@ export class TypeOrmCommandLedgerAdapter implements SunatCommandLedgerPort<Compl
            updated_at = now()
        FROM ready
        WHERE inbox.event_id = ready.event_id
-       RETURNING inbox.event_id, inbox.result, inbox.delivery_attempts`,
+       RETURNING inbox.event_id, inbox.result, inbox.delivery_attempts
+       ) SELECT * FROM claimed`,
       [limit, leaseMilliseconds],
     );
     return rows.map((row) => ({

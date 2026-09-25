@@ -57,6 +57,9 @@ importers:
       '@nestjs/typeorm':
         specifier: 11.0.3
         version: 11.0.3(@nestjs/common@11.2.1(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(typeorm@0.3.31(ioredis@5.11.1)(pg@8.23.0)(ts-node@10.9.2(@types/node@24.10.0)(typescript@5.9.3)))
+      '@xmldom/xmldom':
+        specifier: 0.9.12
+        version: 0.9.12
       bullmq:
         specifier: 6.2.0
         version: 6.2.0(ioredis@5.11.1)(pg@8.23.0)
@@ -69,12 +72,18 @@ importers:
       decimal.js:
         specifier: 10.6.0
         version: 10.6.0
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       helmet:
         specifier: 8.1.0
         version: 8.1.0
       ioredis:
         specifier: 5.11.1
         version: 5.11.1
+      nodemailer:
+        specifier: 10.0.10
+        version: 10.0.10
       passport:
         specifier: 0.7.0
         version: 0.7.0
@@ -99,6 +108,9 @@ importers:
       typeorm:
         specifier: 0.3.31
         version: 0.3.31(ioredis@5.11.1)(pg@8.23.0)(ts-node@10.9.2(@types/node@24.10.0)(typescript@5.9.3))
+      xml-crypto:
+        specifier: 6.3.2
+        version: 6.3.2
       zod:
         specifier: 4.1.12
         version: 4.1.12
@@ -121,6 +133,9 @@ importers:
       '@types/node':
         specifier: 24.10.0
         version: 24.10.0
+      '@types/nodemailer':
+        specifier: 8.0.2
+        version: 8.0.2
       '@types/passport-jwt':
         specifier: 4.0.1
         version: 4.0.1
@@ -130,9 +145,6 @@ importers:
       '@types/supertest':
         specifier: 6.0.3
         version: 6.0.3
-      '@xmldom/xmldom':
-        specifier: 0.9.12
-        version: 0.9.12
       eslint:
         specifier: 9.38.0
         version: 9.38.0
@@ -142,9 +154,6 @@ importers:
       eslint-plugin-prettier:
         specifier: 5.5.4
         version: 5.5.4(@types/eslint@9.6.1)(eslint-config-prettier@10.1.8(eslint@9.38.0))(eslint@9.38.0)(prettier@3.6.2)
-      fflate:
-        specifier: 0.8.3
-        version: 0.8.3
       globals:
         specifier: 16.5.0
         version: 16.5.0
@@ -178,9 +187,6 @@ importers:
       typescript-eslint:
         specifier: 8.46.2
         version: 8.46.2(eslint@9.38.0)(typescript@5.9.3)
-      xml-crypto:
-        specifier: 6.3.2
-        version: 6.3.2
 
 packages:
 
@@ -1173,6 +1179,9 @@ packages:
 
   '@types/node@24.10.0':
     resolution: {integrity: sha512-qzQZRBqkFsYyaSWXuEHc2WR9c0a0CXwiE5FWUvn7ZM+vdy1uZLfCunD38UzhuB7YN/J11ndbDBcTmOdxJo9Q7A==}
+
+  '@types/nodemailer@8.0.2':
+    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
 
   '@types/passport-jwt@4.0.1':
     resolution: {integrity: sha512-Y0Ykz6nWP4jpxgEUYq8NoVZeCQPo1ZndJLfapI249g1jHChvRfZRO/LS3tqu26YgAS/laI1qx98sYGz0IalRXQ==}
@@ -2804,6 +2813,10 @@ packages:
   node-releases@2.0.53:
     resolution: {integrity: sha512-D9UOmYG3UH1V+ENW56t5QXBwJw1YEY18ruVeus89Rw+SyIgjPkCO84bRzO3uNIYosJbNwiabWVn48o3uJLjxFQ==}
     engines: {node: '>=18'}
+
+  nodemailer@10.0.10:
+    resolution: {integrity: sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A==}
+    engines: {node: '>=20.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -5000,6 +5013,10 @@ snapshots:
     dependencies:
       undici-types: 7.16.0
 
+  '@types/nodemailer@8.0.2':
+    dependencies:
+      '@types/node': 24.10.0
+
   '@types/passport-jwt@4.0.1':
     dependencies:
       '@types/jsonwebtoken': 9.0.10
@@ -6882,6 +6899,8 @@ snapshots:
   node-int64@0.4.0: {}
 
   node-releases@2.0.53: {}
+
+  nodemailer@10.0.10: {}
 
   normalize-path@3.0.0: {}
 

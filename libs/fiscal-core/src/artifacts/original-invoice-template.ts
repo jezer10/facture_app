@@ -61,7 +61,10 @@ export function renderOriginalInvoice(snapshot: Record<string, unknown>): string
     issue_date: snapshot.issueDate ?? snapshot.issue_date,
     serial_number: snapshot.series ?? snapshot.serial_number,
     document_number: snapshot.number ?? snapshot.document_number,
-    comment: snapshot.notes ?? snapshot.comment,
+    comment:
+      snapshot.environment === 'beta'
+        ? `SUNAT BETA - SIN VALIDEZ FISCAL. ${text(snapshot.notes ?? snapshot.comment)}`
+        : (snapshot.notes ?? snapshot.comment),
     total_amount_text:
       snapshot.totalAmountText ??
       snapshot.total_amount_text ??

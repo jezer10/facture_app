@@ -37,9 +37,45 @@ de SUNAT en la CDR. Se comprueba el nombre del archivo y la referencia al docume
 Los rechazos y fallos SOAP se conservan para diagnóstico. Ante timeout u otra
 respuesta incierta, el estado es `unconfirmed`; no hay reenvíos automáticos.
 
-El comando funciona separado del flujo distribuido de la API. Swagger y
-`pnpm smoke:mock` continúan usando el simulador. La integración productiva,
-boletas, notas, bajas y conciliación siguen pendientes.
+## API distribuida y correo local
+
+Para usar el servicio oficial beta desde la API, detén primero cualquier instancia
+local y ejecuta:
+
+```bash
+SUNAT_BETA_ISSUER_RUC=20615234762 pnpm dev:beta
+```
+
+Esto inicia PostgreSQL, Redis, MinIO y Mailpit, ejecuta migraciones y prepara un
+certificado exclusivo de prueba. Swagger está en http://localhost:3300/api/docs
+y la bandeja local en http://localhost:58025. `pnpm dev:local` conserva el simulador.
+`GET /api/v1/health/mode` permite distinguir ambos modos.
+
+Con un JSON beta configurado, el siguiente comando crea **una nueva factura** y
+realiza un envío al servicio oficial (no lo uses como prueba de carga):
+
+```bash
+pnpm smoke:beta --config output/sunat-beta/config.json
+```
+
+El flujo de la API guarda los artefactos en MinIO, genera el PDF con la plantilla
+original y, cuando el documento está aceptado y tiene `customer.email`, captura
+un correo en Mailpit con PDF, XML firmado y CDR ZIP. No envía correo a Internet.
+El PDF y el mensaje identifican explícitamente la prueba sin validez fiscal.
+`GET /api/v1/fiscal-documents/:documentId/email-delivery` devuelve el estado de
+entrega con la misma autorización del documento. `sent` significa que el SMTP
+local aceptó el mensaje, no que un cliente lo leyó.
+
+El envío usa un registro persistente por documento. Ante una entrega SMTP incierta
+queda `unconfirmed`, sin reintento automático para evitar duplicados. Antes de
+reintentar manualmente hay que comprobar el buzón. Una respuesta incierta de SUNAT
+tampoco se reenvía automáticamente: la conciliación recupera una respuesta ya
+guardada; no consulta el servicio productivo.
+
+El adaptador beta sólo permite factura 01 en PEN, una línea de cantidad 1, IGV
+18%, sin descuentos y total máximo S/ 500, para el RUC configurado. Producción,
+boletas, notas, bajas y un proveedor real de correo siguen pendientes. El modo
+beta y Mailpit están bloqueados con `NODE_ENV=production`.
 
 Pruebas locales sin red:
 

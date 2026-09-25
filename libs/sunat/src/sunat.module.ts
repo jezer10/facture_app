@@ -57,6 +57,13 @@ import { UnverifiedPkcs12XmlSignerAdapter } from './infrastructure/signing/unver
 import { InMemorySunatStoreAdapter } from './infrastructure/storage/in-memory-sunat-store.adapter';
 import { R2SunatStoreAdapter } from './infrastructure/storage/r2-sunat-store.adapter';
 import { DeterministicUblBuilder } from './infrastructure/ubl/deterministic-ubl-builder';
+import {
+  BetaCredentials,
+  BetaSigner,
+  BetaSunatProvider,
+  BetaUblBuilder,
+  assertBetaOnly,
+} from './infrastructure/beta/beta-adapters';
 import { InternalServiceAuthGuard } from './provisioning/internal-service-auth.guard';
 import { IssuerCredentialController } from './provisioning/issuer-credential.controller';
 import { IssuerCredentialProvisioningService } from './provisioning/issuer-credential-provisioning.service';
@@ -75,6 +82,38 @@ export interface SunatMockModuleOptions {
 
 @Module({})
 export class SunatModule {
+  static forBeta(): DynamicModule {
+    assertBetaOnly();
+    const env = parseEnvironment(process.env);
+    if (!env.SUNAT_BETA_ISSUER_RUC || !env.SUNAT_BETA_KEY_FILE || !env.SUNAT_BETA_CERT_FILE) {
+      throw new SunatUnsafeConfigurationError(
+        'Configura el RUC y certificado de prueba para beta.',
+      );
+    }
+    const persistent = this.forDurableMock({ allowAnyIssuer: false });
+    return {
+      ...persistent,
+      providers: [
+        ...persistent.providers!,
+        {
+          provide: BetaSigner,
+          useFactory: () => new BetaSigner(env.SUNAT_BETA_KEY_FILE!, env.SUNAT_BETA_CERT_FILE!),
+        },
+        { provide: XML_SIGNER_PORT, useExisting: BetaSigner },
+        { provide: ISSUER_CREDENTIAL_PORT, useFactory: () => new BetaCredentials() },
+        {
+          provide: UBL_BUILDER_PORT,
+          useFactory: () => new BetaUblBuilder(env.SUNAT_BETA_ISSUER_RUC!),
+        },
+        {
+          provide: SUNAT_PROVIDER_PORT,
+          inject: [OBJECT_STORAGE_PORT, BetaSigner],
+          useFactory: (storage: ObjectStoragePort, signer: BetaSigner) =>
+            new BetaSunatProvider(storage, signer),
+        },
+      ],
+    };
+  }
   static forMock(options: SunatMockModuleOptions): DynamicModule {
     assertMockConfiguration(options.allowAnyIssuer);
     if (options.allowVolatileAdapters !== true) {
