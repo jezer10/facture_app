@@ -1,5 +1,4 @@
-import { parseEnvironment, redisOptionsFromUrl, type BillingEnvironment } from '@app/platform';
-import type { ConnectionOptions } from 'bullmq';
+import { parseEnvironment, type BillingEnvironment } from '@app/platform';
 
 export function sunatMockIssuerIds(): string[] {
   return (process.env.SUNAT_MOCK_ISSUER_IDS ?? '')
@@ -24,14 +23,6 @@ export function sunatMockAllowAnyIssuer(): boolean {
 
 export function sunatProviderMode(): 'mock' | 'beta' | 'production' {
   return environment().SUNAT_PROVIDER_MODE;
-}
-
-export function redisConnectionConfig(): ConnectionOptions {
-  const configured = environment();
-  return {
-    ...redisOptionsFromUrl(configured.REDIS_URL, configured.REDIS_PASSWORD_FILE),
-    enableOfflineQueue: false,
-  };
 }
 
 export function commandAttempts(): number {

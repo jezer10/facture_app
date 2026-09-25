@@ -75,8 +75,6 @@ const environmentSchema = z
     CORE_DATABASE_PASSWORD_FILE: z.string().min(1).optional(),
     SUNAT_DATABASE_PASSWORD_FILE: z.string().min(1).optional(),
     WEBHOOK_DATABASE_PASSWORD_FILE: z.string().min(1).optional(),
-    REDIS_URL: z.string().min(1).default('redis://localhost:6379/0'),
-    REDIS_PASSWORD_FILE: z.string().min(1).optional(),
     BILLING_JWT_SECRET_FILE: z.string().min(1).optional(),
     BILLING_JWT_ISSUER: z.string().min(1).default('billing-admin'),
     BILLING_JWT_AUDIENCE: z.string().min(1).default('billing-api'),
@@ -101,6 +99,8 @@ const environmentSchema = z
     SUNAT_BETA_KEY_FILE: z.string().optional(),
     SUNAT_BETA_CERT_FILE: z.string().optional(),
     BILLING_EMAIL_MODE: z.enum(['disabled', 'mailpit']).default('disabled'),
+    BILLING_MAILPIT_HOST: z.enum(['127.0.0.1', 'mailpit']).default('127.0.0.1'),
+    BILLING_MAILPIT_PORT: z.coerce.number().int().min(1).max(65535).default(51025),
     SUNAT_ENVIRONMENT: z.enum(['beta', 'production']).default('production'),
     SUNAT_BILL_SERVICE_URL: z.url().optional(),
     SUNAT_CONSULT_SERVICE_URL: z.url().optional(),
@@ -134,7 +134,6 @@ const environmentSchema = z
       ],
       'billing-worker': [
         'CORE_DATABASE_PASSWORD_FILE',
-        'REDIS_PASSWORD_FILE',
         'R2_ACCESS_KEY_ID_FILE',
         'R2_SECRET_ACCESS_KEY_FILE',
       ],
@@ -142,7 +141,6 @@ const environmentSchema = z
         'BILLING_MASTER_KEY_FILE',
         'SUNAT_INTERNAL_SERVICE_SECRET_FILE',
         'SUNAT_DATABASE_PASSWORD_FILE',
-        'REDIS_PASSWORD_FILE',
         'R2_ACCESS_KEY_ID_FILE',
         'R2_SECRET_ACCESS_KEY_FILE',
       ],
@@ -150,7 +148,6 @@ const environmentSchema = z
         'BILLING_MASTER_KEY_FILE',
         'WEBHOOK_INTERNAL_SERVICE_SECRET_FILE',
         'WEBHOOK_DATABASE_PASSWORD_FILE',
-        'REDIS_PASSWORD_FILE',
       ],
       'migration-runner': [
         'CORE_DATABASE_PASSWORD_FILE',
@@ -180,18 +177,9 @@ const environmentSchema = z
 
     const urlsByService = {
       'billing-api': [['CORE_DATABASE_URL', environment.CORE_DATABASE_URL]],
-      'billing-worker': [
-        ['CORE_DATABASE_URL', environment.CORE_DATABASE_URL],
-        ['REDIS_URL', environment.REDIS_URL],
-      ],
-      'sunat-service': [
-        ['SUNAT_DATABASE_URL', environment.SUNAT_DATABASE_URL],
-        ['REDIS_URL', environment.REDIS_URL],
-      ],
-      'webhook-service': [
-        ['WEBHOOK_DATABASE_URL', environment.WEBHOOK_DATABASE_URL],
-        ['REDIS_URL', environment.REDIS_URL],
-      ],
+      'billing-worker': [['CORE_DATABASE_URL', environment.CORE_DATABASE_URL]],
+      'sunat-service': [['SUNAT_DATABASE_URL', environment.SUNAT_DATABASE_URL]],
+      'webhook-service': [['WEBHOOK_DATABASE_URL', environment.WEBHOOK_DATABASE_URL]],
       'migration-runner': [
         ['CORE_DATABASE_URL', environment.CORE_DATABASE_URL],
         ['SUNAT_DATABASE_URL', environment.SUNAT_DATABASE_URL],
@@ -206,23 +194,6 @@ const environmentSchema = z
           message: `${key} must not embed a password in production; use its *_PASSWORD_FILE`,
         });
       }
-    }
-
-    const redisUserByService: Readonly<Partial<Record<string, string>>> = {
-      'billing-worker': 'billing_worker',
-      'sunat-service': 'billing_sunat',
-      'webhook-service': 'billing_webhook',
-    };
-    const expectedRedisUser = redisUserByService[environment.BILLING_SERVICE];
-    if (
-      expectedRedisUser &&
-      decodeURIComponent(new URL(environment.REDIS_URL).username) !== expectedRedisUser
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['REDIS_URL'],
-        message: `REDIS_URL must use the ${expectedRedisUser} ACL user in production`,
-      });
     }
 
     const needsObjectStorage = ['billing-api', 'billing-worker', 'sunat-service'].includes(

@@ -6,7 +6,7 @@ import {
   type PendingCommandDelivery,
   type SunatCommandLedgerPort,
 } from '@app/sunat';
-import { BullMqSunatEventPublisher } from './bullmq-sunat-event-publisher';
+import { SqsSunatEventPublisher } from './sqs-sunat-event-publisher';
 
 const CLAIM_LIMIT = 20;
 const DELIVERY_LEASE_MS = 60_000;
@@ -19,7 +19,7 @@ export class SunatResultOutboxRelay {
   constructor(
     @Inject(SUNAT_COMMAND_LEDGER_PORT)
     private readonly ledger: SunatCommandLedgerPort<CompletedSunatCommand>,
-    private readonly publisher: BullMqSunatEventPublisher,
+    private readonly publisher: SqsSunatEventPublisher,
   ) {}
 
   @Interval(1_000)

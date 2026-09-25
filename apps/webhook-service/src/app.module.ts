@@ -15,10 +15,9 @@ import {
   parseEnvironment,
   EnvelopeEncryption,
   readSecretFile,
-  redisOptionsFromUrl,
   type BillingEnvironment,
 } from '@app/platform';
-import { BullModule } from '@nestjs/bullmq';
+import { SqsQueueModule } from '@app/platform';
 import { Module } from '@nestjs/common';
 import type { Provider } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -50,11 +49,8 @@ const repositoryProvider: Provider = usePersistentRepository
 
 @Module({
   imports: [
-    BullModule.forRoot({
-      prefix: 'billing',
-      connection: redisOptionsFromUrl(environment.REDIS_URL, environment.REDIS_PASSWORD_FILE),
-    }),
-    BullModule.registerQueue({ name: WEBHOOKS_QUEUE }),
+    SqsQueueModule.forRoot(),
+    SqsQueueModule.registerQueue({ name: WEBHOOKS_QUEUE }),
     ...(usePersistentRepository ? [WebhookDatabaseModule] : []),
   ],
   controllers: [InternalHealthController, InternalWebhookSubscriptionsController],

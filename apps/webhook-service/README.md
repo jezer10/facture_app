@@ -3,7 +3,8 @@
 Consumes `billing.webhooks.v1` jobs named `webhook-delivery`. The job data is the
 shared `WebhookEventEnvelope` from `@app/contracts`. Producers should call
 `createWebhookDeliveryJobOptions(envelope.eventId)` so retries use exponential
-backoff and BullMQ deduplicates the stable event ID.
+backoff. SQS can redeliver; the PostgreSQL delivery repository deduplicates the
+stable event ID per subscription.
 
 Each active subscription belonging to `organizationId` receives the exact
 canonical JSON envelope. Requests contain:

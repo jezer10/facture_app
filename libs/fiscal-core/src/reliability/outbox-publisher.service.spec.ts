@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { PdfRenderEnvelope, SunatCommandEnvelope, WebhookEventEnvelope } from '@app/contracts';
 import type { ObjectStoragePort } from '@app/platform';
@@ -169,9 +169,9 @@ function publisherHarness(
   };
   const publisher = new OutboxPublisherService(
     dataSource,
-    { add: jest.fn() } as unknown as Queue<SunatCommandEnvelope>,
-    webhookQueue as unknown as Queue<WebhookEventEnvelope>,
-    { add: jest.fn() } as unknown as Queue<PdfRenderEnvelope>,
+    { add: jest.fn() } as unknown as TaskQueue<SunatCommandEnvelope>,
+    webhookQueue as unknown as TaskQueue<WebhookEventEnvelope>,
+    { add: jest.fn() } as unknown as TaskQueue<PdfRenderEnvelope>,
     objectStorage(),
   );
   return { publisher, created, manager, claimBuilder, outboxRepository, webhookQueue };

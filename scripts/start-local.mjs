@@ -94,14 +94,24 @@ async function main() {
     '120',
   ]);
 
+  await run(process.execPath, ['scripts/provision-local-sqs.mjs']);
+
   // Build the local configuration explicitly so inherited cloud settings cannot leak in.
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (/^(BILLING_|CORE_DATABASE_|SUNAT_|WEBHOOK_|REDIS_|R2_|ALLOW_VOLATILE_ADAPTERS$)/u.test(key))
+    if (
+      /^(BILLING_|CORE_DATABASE_|SUNAT_|WEBHOOK_|REDIS_|AWS_|SQS_|R2_|ALLOW_VOLATILE_ADAPTERS$)/u.test(
+        key,
+      )
+    )
       delete env[key];
   }
   Object.assign(env, {
     NODE_ENV: 'development',
+    AWS_REGION: 'us-east-1',
+    SQS_ACCOUNT_ID: '000000000000',
+    SQS_QUEUE_PREFIX: 'facture-local',
+    SQS_ENDPOINT: 'http://127.0.0.1:59324',
     ALLOW_VOLATILE_ADAPTERS: 'false',
     BILLING_PUBLIC_URL: 'http://localhost:3300',
     BILLING_API_PORT: '3300',
@@ -164,26 +174,16 @@ async function main() {
 
   const services = [
     ['billing-api', {}],
-    [
-      'billing-worker',
-      {
-        REDIS_URL: 'redis://billing_worker@127.0.0.1:56379/0',
-        REDIS_PASSWORD_FILE: secret('redis_worker_password'),
-      },
-    ],
+    ['billing-worker', {}],
     [
       'sunat-service',
       {
-        REDIS_URL: 'redis://billing_sunat@127.0.0.1:56379/0',
-        REDIS_PASSWORD_FILE: secret('redis_sunat_password'),
         BILLING_MASTER_KEY_FILE: secret('sunat_master_key'),
       },
     ],
     [
       'webhook-service',
       {
-        REDIS_URL: 'redis://billing_webhook@127.0.0.1:56379/0',
-        REDIS_PASSWORD_FILE: secret('redis_webhook_password'),
         BILLING_MASTER_KEY_FILE: secret('webhook_master_key'),
       },
     ],

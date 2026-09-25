@@ -1,6 +1,6 @@
-import { InjectQueue } from '@nestjs/bullmq';
+import { InjectTaskQueue } from '@app/platform';
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 
 import {
   SUNAT_COMMAND_JOB,
@@ -20,12 +20,12 @@ import {
 } from '../runtime-config';
 
 @Injectable()
-export class BullMqSunatEventPublisher {
+export class SqsSunatEventPublisher {
   constructor(
-    @InjectQueue(SUNAT_RESULTS_QUEUE)
-    private readonly resultQueue: Queue<SunatResultEnvelope>,
-    @InjectQueue(SUNAT_COMMANDS_QUEUE)
-    private readonly commandQueue: Queue<SunatCommandEnvelope>,
+    @InjectTaskQueue(SUNAT_RESULTS_QUEUE)
+    private readonly resultQueue: TaskQueue<SunatResultEnvelope>,
+    @InjectTaskQueue(SUNAT_COMMANDS_QUEUE)
+    private readonly commandQueue: TaskQueue<SunatCommandEnvelope>,
   ) {}
 
   async publishResult(result: SunatResultEnvelope): Promise<void> {
@@ -33,8 +33,6 @@ export class BullMqSunatEventPublisher {
       jobId: result.eventId,
       attempts: resultAttempts(),
       backoff: { type: 'exponential', delay: resultBackoffMs() },
-      removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100_000 },
-      removeOnFail: false,
     });
   }
 
@@ -44,8 +42,6 @@ export class BullMqSunatEventPublisher {
       delay: reconciliationDelayMs(),
       attempts: reconciliationAttempts(),
       backoff: { type: 'exponential', delay: commandBackoffMs() },
-      removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100_000 },
-      removeOnFail: false,
     });
   }
 }

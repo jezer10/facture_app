@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
+import { InjectTaskQueue } from '@app/platform';
 import { Interval } from '@nestjs/schedule';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 import { DataSource } from 'typeorm';
 import type {
   SunatCommandEnvelope,
@@ -43,12 +43,12 @@ export class OutboxPublisherService {
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
-    @InjectQueue(SUNAT_COMMANDS_QUEUE)
-    private readonly sunatCommands: Queue<SunatCommandEnvelope>,
-    @InjectQueue(WEBHOOKS_QUEUE)
-    private readonly webhooks: Queue<WebhookEventEnvelope>,
-    @InjectQueue(CORE_ARTIFACTS_QUEUE)
-    private readonly coreArtifacts: Queue<PdfRenderEnvelope>,
+    @InjectTaskQueue(SUNAT_COMMANDS_QUEUE)
+    private readonly sunatCommands: TaskQueue<SunatCommandEnvelope>,
+    @InjectTaskQueue(WEBHOOKS_QUEUE)
+    private readonly webhooks: TaskQueue<WebhookEventEnvelope>,
+    @InjectTaskQueue(CORE_ARTIFACTS_QUEUE)
+    private readonly coreArtifacts: TaskQueue<PdfRenderEnvelope>,
     @Inject(OBJECT_STORAGE_PORT) private readonly storage: ObjectStoragePort,
   ) {}
 
@@ -101,8 +101,6 @@ export class OutboxPublisherService {
           jobId: event.eventId,
           attempts: 4,
           backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100_000 },
-          removeOnFail: false,
         });
       } else if (event.eventType === 'core.pdf.requested.v1') {
         const renderEvent = this.buildPdfRenderEvent(event);
@@ -110,8 +108,6 @@ export class OutboxPublisherService {
           jobId: event.eventId,
           attempts: 4,
           backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100_000 },
-          removeOnFail: false,
         });
       } else if (event.eventType.startsWith('webhook.')) {
         const webhook = this.buildWebhookEvent(event);
@@ -119,8 +115,6 @@ export class OutboxPublisherService {
           jobId: event.eventId,
           attempts: 8,
           backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: { age: 30 * 24 * 60 * 60, count: 100_000 },
-          removeOnFail: false,
         });
       } else {
         throw new Error(`Unsupported outbox event type: ${event.eventType}`);

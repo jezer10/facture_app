@@ -86,8 +86,6 @@ function productionSunatEnvironment(): NodeJS.ProcessEnv {
     BILLING_PUBLIC_URL: 'https://billing.example.com',
     SUNAT_DATABASE_URL: 'postgresql://billing_sunat@postgres:5432/billing_sunat',
     SUNAT_DATABASE_PASSWORD_FILE: '/run/secrets/sunat_db_password',
-    REDIS_URL: 'redis://billing_sunat@redis:6379/0',
-    REDIS_PASSWORD_FILE: '/run/secrets/redis_password',
     BILLING_MASTER_KEY_FILE: '/run/secrets/master_key',
     SUNAT_INTERNAL_SERVICE_SECRET_FILE: '/run/secrets/sunat_internal_secret',
     R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
@@ -104,8 +102,6 @@ function productionWebhookEnvironment(): NodeJS.ProcessEnv {
     BILLING_PUBLIC_URL: 'https://billing.example.com',
     WEBHOOK_DATABASE_URL: 'postgresql://billing_delivery@postgres:5432/billing_delivery',
     WEBHOOK_DATABASE_PASSWORD_FILE: '/run/secrets/webhook_db_password',
-    REDIS_URL: 'redis://billing_webhook@redis:6379/0',
-    REDIS_PASSWORD_FILE: '/run/secrets/redis_password',
     BILLING_MASTER_KEY_FILE: '/run/secrets/master_key',
     WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: '/run/secrets/webhook_internal_secret',
   };

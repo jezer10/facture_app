@@ -1,6 +1,6 @@
 import type { S3Client } from '@aws-sdk/client-s3';
 
-import { databaseUrlWithPassword } from '../../libs/platform/src/config/redis';
+import { databaseUrlWithPassword } from '../../libs/platform/src/config/database';
 import { readSecretFile } from '../../libs/platform/src/config/secret-file';
 
 import {

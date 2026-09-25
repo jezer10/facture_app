@@ -1,4 +1,4 @@
-import { BullModule } from '@nestjs/bullmq';
+import { SqsQueueModule } from '@app/platform';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -8,15 +8,8 @@ import { SunatModule } from '@app/sunat';
 
 import { SunatHealthController } from './health/sunat-health.controller';
 import { SunatHealthService } from './health/sunat-health.service';
-import {
-  commandAttempts,
-  commandBackoffMs,
-  redisConnectionConfig,
-  sunatMockAllowAnyIssuer,
-  sunatMockIssuerIds,
-  sunatProviderMode,
-} from './runtime-config';
-import { BullMqSunatEventPublisher } from './transport/bullmq-sunat-event-publisher';
+import { sunatMockAllowAnyIssuer, sunatMockIssuerIds, sunatProviderMode } from './runtime-config';
+import { SqsSunatEventPublisher } from './transport/sqs-sunat-event-publisher';
 import { SunatCommandProcessor } from './transport/sunat-command.processor';
 import { SunatResultOutboxRelay } from './transport/sunat-result-outbox-relay';
 
@@ -34,28 +27,14 @@ const sunatDomainModule =
   imports: [
     ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
     ScheduleModule.forRoot(),
-    BullModule.forRoot({
-      connection: redisConnectionConfig(),
-      prefix: 'billing',
-    }),
-    BullModule.registerQueue(
-      {
-        name: SUNAT_COMMANDS_QUEUE,
-        defaultJobOptions: {
-          attempts: commandAttempts(),
-          backoff: { type: 'exponential', delay: commandBackoffMs() },
-          removeOnComplete: { count: 5_000 },
-          removeOnFail: { count: 5_000 },
-        },
-      },
-      { name: SUNAT_RESULTS_QUEUE },
-    ),
+    SqsQueueModule.forRoot(),
+    SqsQueueModule.registerQueue({ name: SUNAT_COMMANDS_QUEUE }, { name: SUNAT_RESULTS_QUEUE }),
     sunatDomainModule,
   ],
   controllers: [SunatHealthController],
   providers: [
     SunatHealthService,
-    BullMqSunatEventPublisher,
+    SqsSunatEventPublisher,
     SunatCommandProcessor,
     SunatResultOutboxRelay,
   ],

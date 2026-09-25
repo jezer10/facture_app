@@ -35,8 +35,8 @@ export class DocumentEmailService {
   private readonly env = parseEnvironment(process.env);
   // Deliberately local-only until a real sender/provider is configured and tested.
   private readonly transport = nodemailer.createTransport({
-    host: '127.0.0.1',
-    port: 51025,
+    host: this.env.BILLING_MAILPIT_HOST,
+    port: this.env.BILLING_MAILPIT_PORT,
     secure: false,
     ignoreTLS: true,
     connectionTimeout: 5000,

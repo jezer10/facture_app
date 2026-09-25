@@ -110,7 +110,7 @@ describe('SunatCommandExecutor', () => {
     const command = issueCommandFixture(fixture.store);
     const unsafe = {
       ...command,
-      payload: { ...command.payload, clientSecret: 'must-not-enter-redis' },
+      payload: { ...command.payload, clientSecret: 'must-not-enter-queue' },
     } as unknown as SunatCommandEnvelope;
     const submit = jest.spyOn(fixture.provider, 'submitDocument');
     const reserve = jest.spyOn(fixture.ledger, 'reserve');

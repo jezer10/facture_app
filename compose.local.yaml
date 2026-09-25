@@ -31,23 +31,18 @@ services:
       timeout: 5s
       retries: 30
 
-  redis:
-    image: redis:7-alpine
+  sqs:
+    image: localstack/localstack:4.12.0
     restart: unless-stopped
-    entrypoint: [/usr/local/bin/start-secure-redis.sh]
-    secrets:
-      [redis_health_password, redis_worker_password, redis_sunat_password, redis_webhook_password]
-    volumes:
-      - redis_data:/data
-      - ./deploy/redis/start-secure-redis.sh:/usr/local/bin/start-secure-redis.sh:ro
-    ports: ['127.0.0.1:56379:6379']
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      SQS_ENDPOINT_STRATEGY: 'off'
+      EAGER_SERVICE_LOADING: '1'
+    ports: ['127.0.0.1:59324:4566']
     healthcheck:
-      test:
-        [
-          CMD-SHELL,
-          'redis-cli --no-auth-warning --user billing_health -a "$$(cat /run/secrets/redis_health_password)" ping | grep -q PONG',
-        ]
-      interval: 2s
+      test: [CMD, curl, -fsS, http://localhost:4566/_localstack/health]
+      interval: 5s
       timeout: 5s
       retries: 30
 
@@ -70,7 +65,6 @@ services:
 volumes:
   mailpit_data:
   postgres_data:
-  redis_data:
   minio_data:
 
 secrets:
@@ -78,9 +72,5 @@ secrets:
   core_db_password: { file: ./deploy/secrets/local/core_db_password }
   sunat_db_password: { file: ./deploy/secrets/local/sunat_db_password }
   webhook_db_password: { file: ./deploy/secrets/local/webhook_db_password }
-  redis_health_password: { file: ./deploy/secrets/local/redis_health_password }
-  redis_worker_password: { file: ./deploy/secrets/local/redis_worker_password }
-  redis_sunat_password: { file: ./deploy/secrets/local/redis_sunat_password }
-  redis_webhook_password: { file: ./deploy/secrets/local/redis_webhook_password }
   minio_access_key: { file: ./deploy/secrets/local/minio_access_key }
   minio_secret_key: { file: ./deploy/secrets/local/minio_secret_key }

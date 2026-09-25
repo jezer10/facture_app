@@ -1,12 +1,12 @@
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 import {
   SUNAT_RESULT_JOB,
   type SunatCommandEnvelope,
   type SunatResultEnvelope,
 } from '@app/contracts';
-import { BullMqSunatEventPublisher } from './bullmq-sunat-event-publisher';
+import { SqsSunatEventPublisher } from './sqs-sunat-event-publisher';
 
-describe('BullMqSunatEventPublisher', () => {
+describe('SqsSunatEventPublisher', () => {
   const originalEnvironment = process.env;
 
   beforeEach(() => {
@@ -21,9 +21,9 @@ describe('BullMqSunatEventPublisher', () => {
 
   it('publishes result jobs with bounded retries, backoff, and retained failures', async () => {
     const resultQueue = { add: jest.fn().mockResolvedValue(undefined) };
-    const publisher = new BullMqSunatEventPublisher(
-      resultQueue as unknown as Queue<SunatResultEnvelope>,
-      { add: jest.fn() } as unknown as Queue<SunatCommandEnvelope>,
+    const publisher = new SqsSunatEventPublisher(
+      resultQueue as unknown as TaskQueue<SunatResultEnvelope>,
+      { add: jest.fn() } as unknown as TaskQueue<SunatCommandEnvelope>,
     );
     const result = resultFixture();
 
@@ -33,8 +33,6 @@ describe('BullMqSunatEventPublisher', () => {
       jobId: result.eventId,
       attempts: 8,
       backoff: { type: 'exponential', delay: 1_000 },
-      removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100_000 },
-      removeOnFail: false,
     });
   });
 });

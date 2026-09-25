@@ -5,7 +5,7 @@ import type {
   PendingCommandDelivery,
   SunatCommandLedgerPort,
 } from '@app/sunat';
-import type { BullMqSunatEventPublisher } from './bullmq-sunat-event-publisher';
+import type { SqsSunatEventPublisher } from './sqs-sunat-event-publisher';
 import { SunatResultOutboxRelay } from './sunat-result-outbox-relay';
 
 describe('SunatResultOutboxRelay', () => {
@@ -21,7 +21,7 @@ describe('SunatResultOutboxRelay', () => {
     const markDelivered = jest.fn().mockResolvedValue(undefined);
     const publishResult = jest
       .fn()
-      .mockRejectedValueOnce(new Error('redis unavailable'))
+      .mockRejectedValueOnce(new Error('sqs unavailable'))
       .mockResolvedValueOnce(undefined);
     const relay = new SunatResultOutboxRelay(
       {
@@ -32,7 +32,7 @@ describe('SunatResultOutboxRelay', () => {
       {
         publishResult,
         publishFollowUp: jest.fn(),
-      } as unknown as BullMqSunatEventPublisher,
+      } as unknown as SqsSunatEventPublisher,
     );
 
     await relay.publishPendingDeliveries();

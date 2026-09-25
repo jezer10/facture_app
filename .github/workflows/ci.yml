@@ -28,9 +28,90 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test --ci
+      - run: pnpm test:sunat-beta
       - run: pnpm test:legacy-migration
       - run: pnpm build
       - run: pnpm audit --prod
       - run: pnpm audit --dev
       - run: pnpm audit:no-secrets
       - run: pnpm audit:no-python
+
+  images:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: verify
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [runtime, runtime-worker, migrations]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository }}-${{ matrix.target }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  deploy-beta:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: beta
+      url: https://facture.jzrzr.com/api/docs
+    concurrency:
+      group: facture-beta-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Check release is still the branch head
+        run: test "$(git ls-remote origin refs/heads/develop | cut -f1)" = "$GITHUB_SHA"
+      - name: Upload release
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          ssh -o BatchMode=yes "ubuntu@$DEPLOY_HOST" "mkdir -p /srv/facture/releases/$RELEASE_SHA"
+          tar -czf - compose.yaml compose.beta.yaml deploy/postgres deploy/server |
+            ssh -o BatchMode=yes "ubuntu@$DEPLOY_HOST" "tar -xzf - -C /srv/facture/releases/$RELEASE_SHA"
+      - name: Pull and deploy verified images
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          RELEASE_SHA: ${{ github.sha }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes "ubuntu@$DEPLOY_HOST" \
+            "REGISTRY_USER='$REGISTRY_USER' bash /srv/facture/releases/$RELEASE_SHA/deploy/server/registry-deploy.sh"
+      - name: Verify public API
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 5 --retry-all-errors https://facture.jzrzr.com/api/v1/health/ready
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

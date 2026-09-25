@@ -44,10 +44,7 @@ export class TypeOrmCommandLedgerAdapter implements SunatCommandLedgerPort<Compl
        SET locked_at = now(), processing_attempt = $2, updated_at = now()
        WHERE event_id = $1
          AND status = 'processing'
-         AND (
-           processing_attempt < $2
-           OR locked_at < now() - ($3 * interval '1 millisecond')
-         )
+         AND locked_at < now() - ($3 * interval '1 millisecond')
        RETURNING event_id`,
       [eventId, attempt, this.staleLockMilliseconds],
     );

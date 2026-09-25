@@ -5,7 +5,7 @@ Docker Compose los expone dentro de cada contenedor como mounts de solo lectura 
 `/run/secrets`, con acceso concedido únicamente a los servicios que los declaran:
 
 - `postgres_admin_password`, `core_db_password`, `sunat_db_password`, `webhook_db_password`
-- `redis_health_password`, `redis_worker_password`, `redis_sunat_password`, `redis_webhook_password`
+- `aws_worker_credentials`, `aws_sunat_credentials`, `aws_webhook_credentials` (formato AWS `[default]`; consulta `deploy/sqs/README.md`)
 - `jwt_secret`, `api_key_pepper`, `api_key_replay_key`
 - `sunat_master_key`, `webhook_master_key`
 - `sunat_internal_secret`, `webhook_internal_secret`
@@ -42,8 +42,6 @@ sudo install -o 1000 -g 1000 -m 0600 /ruta/segura/valor \
 ```
 
 PostgreSQL arranca como `root`, copia únicamente sus cuatro secretos a `/run` con
-propietario `postgres` y luego pierde privilegios. Redis también consume sus secretos
-antes de perder privilegios. Así los archivos fuente no necesitan permisos globales ni
-de grupo. Si se cambia la imagen base o su UID, se debe actualizar primero este contrato.
+propietario `postgres` y luego pierde privilegios. Los archivos fuente no necesitan permisos globales ni de grupo. Si se cambia la imagen base o su UID, se debe actualizar primero este contrato.
 
 No copies secretos reales dentro de este directorio de plantillas ni dentro de Git.

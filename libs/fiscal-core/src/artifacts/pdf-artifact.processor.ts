@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { QueueProcessor, TaskWorker } from '@app/platform';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { Job } from 'bullmq';
+import type { TaskJob } from '@app/platform';
 import { DataSource } from 'typeorm';
 import type { PdfRenderEnvelope, PublicDocumentStatus } from '@app/contracts';
 import { coreDocumentArtifactObjectKey, CORE_ARTIFACTS_QUEUE } from '@app/contracts';
@@ -23,8 +23,8 @@ const PDF_ELIGIBLE_STATUSES: ReadonlySet<PublicDocumentStatus> = new Set([
   'voided',
 ]);
 
-@Processor(CORE_ARTIFACTS_QUEUE, { concurrency: 1 })
-export class PdfArtifactProcessor extends WorkerHost {
+@QueueProcessor(CORE_ARTIFACTS_QUEUE, { concurrency: 1 })
+export class PdfArtifactProcessor extends TaskWorker {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(OBJECT_STORAGE_PORT) private readonly storage: ObjectStoragePort,
@@ -33,7 +33,7 @@ export class PdfArtifactProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<PdfRenderEnvelope>): Promise<void> {
+  async process(job: TaskJob<PdfRenderEnvelope>): Promise<void> {
     const event = job.data;
     if (
       await this.dataSource.getRepository(InboxMessageEntity).existsBy({

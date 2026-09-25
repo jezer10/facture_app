@@ -46,7 +46,7 @@ local y ejecuta:
 SUNAT_BETA_ISSUER_RUC=20615234762 pnpm dev:beta
 ```
 
-Esto inicia PostgreSQL, Redis, MinIO y Mailpit, ejecuta migraciones y prepara un
+Esto inicia PostgreSQL, SQS local, MinIO y Mailpit, ejecuta migraciones y prepara un
 certificado exclusivo de prueba. Swagger está en http://localhost:3300/api/docs
 y la bandeja local en http://localhost:58025. `pnpm dev:local` conserva el simulador.
 `GET /api/v1/health/mode` permite distinguir ambos modos.
@@ -57,6 +57,15 @@ realiza un envío al servicio oficial (no lo uses como prueba de carga):
 ```bash
 pnpm smoke:beta --config output/sunat-beta/config.json
 ```
+
+El RUC del emisor es único. Para repetir la prueba con el emisor y la serie
+existentes, conserva el archivo privado generado y ejecuta:
+
+```bash
+pnpm smoke:beta --config output/sunat-beta/config.json --reuse output/sunat-beta/api-access.json
+```
+
+Esto crea otra factura con el siguiente correlativo; no reenvía la anterior.
 
 El flujo de la API guarda los artefactos en MinIO, genera el PDF con la plantilla
 original y, cuando el documento está aceptado y tiene `customer.email`, captura

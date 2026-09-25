@@ -82,7 +82,7 @@ describe('WebhookDeliveryService', () => {
     ).toEqual({ valid: true });
   });
 
-  it('records a permanent 4xx response without asking BullMQ to retry it', async () => {
+  it('records a permanent 4xx response without asking SQS to retry it', async () => {
     const repository = InMemoryWebhookRepository.create({
       environment: 'test',
       explicitlyEnabled: true,

@@ -5,19 +5,19 @@ import {
   TransientWebhookDeliveryError,
   WebhookDeliveryService,
 } from '@app/webhooks';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import type { Job } from 'bullmq';
-import { UnrecoverableError } from 'bullmq';
+import { QueueProcessor, TaskWorker } from '@app/platform';
+import type { TaskJob } from '@app/platform';
+import { NonRetryableJobError } from '@app/platform';
 
-@Processor(WEBHOOKS_QUEUE, { concurrency: 5 })
-export class BillingWebhooksProcessor extends WorkerHost {
+@QueueProcessor(WEBHOOKS_QUEUE, { concurrency: 5 })
+export class BillingWebhooksProcessor extends TaskWorker {
   constructor(private readonly deliveryService: WebhookDeliveryService) {
     super();
   }
 
-  async process(job: Job<WebhookEventEnvelope, void, string>): Promise<void> {
+  async process(job: TaskJob<WebhookEventEnvelope>): Promise<void> {
     if (job.name !== WEBHOOK_DELIVERY_JOB) {
-      throw new UnrecoverableError('Unsupported webhook job name');
+      throw new NonRetryableJobError('Unsupported webhook job name');
     }
 
     try {
@@ -32,10 +32,10 @@ export class BillingWebhooksProcessor extends WorkerHost {
       }
 
       if (error instanceof PermanentWebhookDeliveryError) {
-        throw new UnrecoverableError(`${error.code}: ${error.message}`);
+        throw new NonRetryableJobError(`${error.code}: ${error.message}`);
       }
 
-      throw new UnrecoverableError('Webhook job failed without a retry classification');
+      throw new NonRetryableJobError('Webhook job failed without a retry classification');
     }
   }
 }

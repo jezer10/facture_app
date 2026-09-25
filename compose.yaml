@@ -4,13 +4,15 @@ x-common-environment: &common-environment
   NODE_ENV: production
   BILLING_PUBLIC_URL: ${BILLING_PUBLIC_URL:?Set BILLING_PUBLIC_URL}
   ALLOW_VOLATILE_ADAPTERS: 'false'
+  AWS_REGION: ${AWS_REGION:?Set AWS_REGION}
+  SQS_ACCOUNT_ID: ${SQS_ACCOUNT_ID:?Set SQS_ACCOUNT_ID}
+  SQS_QUEUE_PREFIX: ${SQS_QUEUE_PREFIX:-facture-beta}
 
 x-common-app: &common-app
   restart: unless-stopped
   networks: [billing_private, billing_egress]
   depends_on:
     postgres: { condition: service_healthy }
-    redis: { condition: service_healthy }
     migrations: { condition: service_completed_successfully }
 
 services:
@@ -34,29 +36,6 @@ services:
       - ./deploy/postgres/start-secure-postgres.sh:/usr/local/bin/start-secure-postgres.sh:ro
     healthcheck:
       test: [CMD-SHELL, 'pg_isready -U billing_admin -d postgres']
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    networks: [billing_private]
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    entrypoint: [/usr/local/bin/start-secure-redis.sh]
-    secrets:
-      - redis_health_password
-      - redis_worker_password
-      - redis_sunat_password
-      - redis_webhook_password
-    volumes:
-      - redis_data:/data
-      - ./deploy/redis/start-secure-redis.sh:/usr/local/bin/start-secure-redis.sh:ro
-    healthcheck:
-      test:
-        [
-          CMD-SHELL,
-          'redis-cli --no-auth-warning --user billing_health -a "$$(cat /run/secrets/redis_health_password)" ping | grep -q PONG',
-        ]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -94,7 +73,7 @@ services:
       <<: *common-environment
       BILLING_SERVICE: billing-api
       BILLING_API_PORT: 3000
-      BILLING_TRUSTED_PROXY_CIDRS: ${BILLING_TRUSTED_PROXY_CIDRS:-172.30.250.1/32}
+      BILLING_TRUSTED_PROXY_CIDRS: ${BILLING_TRUSTED_PROXY_CIDRS:-172.31.250.1/32}
       CORE_DATABASE_URL: postgresql://billing_core@postgres:5432/billing_core
       CORE_DATABASE_PASSWORD_FILE: /run/secrets/core_db_password
       BILLING_JWT_SECRET_FILE: /run/secrets/jwt_secret
@@ -146,11 +125,11 @@ services:
       target: runtime-worker
     command: [node, dist/apps/billing-worker/main.js]
     environment:
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/aws_credentials
+      AWS_PROFILE: default
       <<: *common-environment
       BILLING_SERVICE: billing-worker
       BILLING_WORKER_PORT: 3001
-      REDIS_URL: redis://billing_worker@redis:6379/0
-      REDIS_PASSWORD_FILE: /run/secrets/redis_password
       CORE_DATABASE_URL: postgresql://billing_core@postgres:5432/billing_core
       CORE_DATABASE_PASSWORD_FILE: /run/secrets/core_db_password
       R2_ENDPOINT: ${R2_ENDPOINT:?Set R2_ENDPOINT}
@@ -159,9 +138,9 @@ services:
       R2_ACCESS_KEY_ID_FILE: /run/secrets/r2_access_key_id
       R2_SECRET_ACCESS_KEY_FILE: /run/secrets/r2_secret_access_key
     secrets:
+      - source: aws_worker_credentials
+        target: aws_credentials
       - core_db_password
-      - source: redis_worker_password
-        target: redis_password
       - source: r2_worker_access_key_id
         target: r2_access_key_id
       - source: r2_worker_secret_access_key
@@ -185,12 +164,12 @@ services:
       target: runtime
     command: [node, dist/apps/sunat-service/main.js]
     environment:
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/aws_credentials
+      AWS_PROFILE: default
       <<: *common-environment
       BILLING_SERVICE: sunat-service
       SUNAT_SERVICE_PORT: 3002
       SUNAT_SERVICE_HOST: 0.0.0.0
-      REDIS_URL: redis://billing_sunat@redis:6379/0
-      REDIS_PASSWORD_FILE: /run/secrets/redis_password
       SUNAT_DATABASE_URL: postgresql://billing_sunat@postgres:5432/billing_sunat
       SUNAT_DATABASE_PASSWORD_FILE: /run/secrets/sunat_db_password
       BILLING_MASTER_KEY_FILE: /run/secrets/master_key
@@ -202,9 +181,9 @@ services:
       R2_ACCESS_KEY_ID_FILE: /run/secrets/r2_access_key_id
       R2_SECRET_ACCESS_KEY_FILE: /run/secrets/r2_secret_access_key
     secrets:
+      - source: aws_sunat_credentials
+        target: aws_credentials
       - sunat_db_password
-      - source: redis_sunat_password
-        target: redis_password
       - source: sunat_master_key
         target: master_key
       - sunat_internal_secret
@@ -231,19 +210,19 @@ services:
       target: runtime
     command: [node, dist/apps/webhook-service/main.js]
     environment:
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/aws_credentials
+      AWS_PROFILE: default
       <<: *common-environment
       BILLING_SERVICE: webhook-service
       WEBHOOK_SERVICE_PORT: 3003
-      REDIS_URL: redis://billing_webhook@redis:6379/0
-      REDIS_PASSWORD_FILE: /run/secrets/redis_password
       WEBHOOK_DATABASE_URL: postgresql://billing_delivery@postgres:5432/billing_delivery
       WEBHOOK_DATABASE_PASSWORD_FILE: /run/secrets/webhook_db_password
       BILLING_MASTER_KEY_FILE: /run/secrets/master_key
       WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/webhook_internal_secret
     secrets:
+      - source: aws_webhook_credentials
+        target: aws_credentials
       - webhook_db_password
-      - source: redis_webhook_password
-        target: redis_password
       - source: webhook_master_key
         target: master_key
       - webhook_internal_secret
@@ -261,7 +240,6 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   billing_private:
@@ -269,18 +247,14 @@ networks:
   billing_egress:
     ipam:
       config:
-        - subnet: ${BILLING_EGRESS_SUBNET:-172.30.250.0/24}
-          gateway: ${BILLING_EGRESS_GATEWAY:-172.30.250.1}
+        - subnet: ${BILLING_EGRESS_SUBNET:-172.31.250.0/24}
+          gateway: ${BILLING_EGRESS_GATEWAY:-172.31.250.1}
 
 secrets:
   postgres_admin_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/postgres_admin_password' }
   core_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/core_db_password' }
   sunat_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/sunat_db_password' }
   webhook_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/webhook_db_password' }
-  redis_health_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_health_password' }
-  redis_worker_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_worker_password' }
-  redis_sunat_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_sunat_password' }
-  redis_webhook_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/redis_webhook_password' }
   jwt_secret: { file: '${SECRET_DIR:-./deploy/secrets/local}/jwt_secret' }
   api_key_pepper: { file: '${SECRET_DIR:-./deploy/secrets/local}/api_key_pepper' }
   api_key_replay_key: { file: '${SECRET_DIR:-./deploy/secrets/local}/api_key_replay_key' }
@@ -297,3 +271,7 @@ secrets:
   r2_sunat_access_key_id: { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_sunat_access_key_id' }
   r2_sunat_secret_access_key:
     { file: '${SECRET_DIR:-./deploy/secrets/local}/r2_sunat_secret_access_key' }
+
+  aws_worker_credentials: { file: '${SECRET_DIR:-./deploy/secrets/local}/aws_worker_credentials' }
+  aws_sunat_credentials: { file: '${SECRET_DIR:-./deploy/secrets/local}/aws_sunat_credentials' }
+  aws_webhook_credentials: { file: '${SECRET_DIR:-./deploy/secrets/local}/aws_webhook_credentials' }

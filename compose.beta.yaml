@@ -1,0 +1,65 @@
+# Hosted SUNAT beta. Never use this override for fiscal production.
+x-beta-environment: &beta-environment
+  NODE_ENV: development
+  SUNAT_PROVIDER_MODE: beta
+  SUNAT_ENVIRONMENT: beta
+  SUNAT_MOCK_ALLOW_ANY_ISSUER: 'false'
+
+services:
+  migrations:
+    image: ${FACTURE_IMAGE_PREFIX:?Set FACTURE_IMAGE_PREFIX}-migrations:${FACTURE_IMAGE_TAG:?Set FACTURE_IMAGE_TAG}
+  billing-api:
+    image: ${FACTURE_IMAGE_PREFIX}-runtime:${FACTURE_IMAGE_TAG}
+    environment:
+      <<: *beta-environment
+      BILLING_TRUSTED_PROXY_CIDRS: 172.31.250.10/32
+  billing-worker:
+    image: ${FACTURE_IMAGE_PREFIX}-runtime-worker:${FACTURE_IMAGE_TAG}
+    environment:
+      <<: *beta-environment
+      BILLING_EMAIL_MODE: mailpit
+      BILLING_MAILPIT_HOST: mailpit
+      BILLING_MAILPIT_PORT: 1025
+  sunat-service:
+    image: ${FACTURE_IMAGE_PREFIX}-runtime:${FACTURE_IMAGE_TAG}
+    environment:
+      <<: *beta-environment
+      SUNAT_BETA_ISSUER_RUC: ${SUNAT_BETA_ISSUER_RUC:?Set SUNAT_BETA_ISSUER_RUC}
+      SUNAT_BETA_KEY_FILE: /run/secrets/beta_private.key
+      SUNAT_BETA_CERT_FILE: /run/secrets/beta_certificate.pem
+    secrets:
+      - source: beta_private_key
+        target: beta_private.key
+      - source: beta_certificate
+        target: beta_certificate.pem
+  webhook-service:
+    image: ${FACTURE_IMAGE_PREFIX}-runtime:${FACTURE_IMAGE_TAG}
+    environment:
+      <<: *beta-environment
+  mailpit:
+    image: axllent/mailpit:v1.29.2
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_DISABLE_RDNS: 'true'
+    volumes: [mailpit_data:/data]
+    networks: [billing_private]
+    ports: ['127.0.0.1:58025:8025']
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.0
+    restart: unless-stopped
+    command: [tunnel, --no-autoupdate, run, --token-file, /run/secrets/cloudflare_tunnel_token]
+    secrets: [cloudflare_tunnel_token]
+    networks:
+      billing_egress:
+        ipv4_address: 172.31.250.10
+    depends_on:
+      billing-api: { condition: service_healthy }
+
+volumes:
+  mailpit_data:
+
+secrets:
+  beta_private_key: { file: '${SECRET_DIR}/beta_private.key' }
+  beta_certificate: { file: '${SECRET_DIR}/beta_certificate.pem' }
+  cloudflare_tunnel_token: { file: '${SECRET_DIR}/cloudflare_tunnel_token' }

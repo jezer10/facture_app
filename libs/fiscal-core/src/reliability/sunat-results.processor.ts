@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { QueueProcessor, TaskWorker } from '@app/platform';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { Job } from 'bullmq';
+import type { TaskJob } from '@app/platform';
 import { DataSource, EntityManager } from 'typeorm';
 import type {
   ArtifactReference,
@@ -30,8 +30,8 @@ import { enqueueWebhookEvent } from './webhook-outbox';
 const CONSUMER_NAME = 'billing-core.sunat-results.v1';
 
 @Injectable()
-@Processor(SUNAT_RESULTS_QUEUE, { concurrency: 5 })
-export class SunatResultsProcessor extends WorkerHost {
+@QueueProcessor(SUNAT_RESULTS_QUEUE, { concurrency: 5 })
+export class SunatResultsProcessor extends TaskWorker {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(OBJECT_STORAGE_PORT) private readonly storage: ObjectStoragePort,
@@ -39,7 +39,7 @@ export class SunatResultsProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<SunatResultEnvelope>): Promise<void> {
+  async process(job: TaskJob<SunatResultEnvelope>): Promise<void> {
     const result = job.data;
     await verifyStoredSunatResult(this.storage, result);
     if (result.type === 'sunat.received.sync.completed.v1') {

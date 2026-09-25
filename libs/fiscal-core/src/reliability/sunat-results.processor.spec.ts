@@ -1,7 +1,7 @@
 import { sunatDocumentArtifactObjectKey } from '@app/contracts';
 import type { ReceivedDocumentRecord, SunatResultEnvelope } from '@app/contracts';
 import { canonicalJson, sha256, type ObjectStoragePort } from '@app/platform';
-import type { Job } from 'bullmq';
+import type { TaskJob } from '@app/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 
 import {
@@ -27,7 +27,7 @@ describe('SunatResultsProcessor', () => {
     const manager = entityManager({ created, document });
     const processor = new SunatResultsProcessor(dataSource(manager), objectStorage(storedPayload));
 
-    await processor.process({ data: verifiedResult } as Job<SunatResultEnvelope>);
+    await processor.process({ data: verifiedResult } as TaskJob<SunatResultEnvelope>);
 
     expect(document.status).toBe('processing');
     const processingEvent = created.find(
@@ -75,7 +75,7 @@ describe('SunatResultsProcessor', () => {
     });
     const processor = new SunatResultsProcessor(dataSource(manager), objectStorage(storedPayload));
 
-    await processor.process({ data: verifiedResult } as Job<SunatResultEnvelope>);
+    await processor.process({ data: verifiedResult } as TaskJob<SunatResultEnvelope>);
 
     expect(document.status).toBe('accepted_with_observations');
     expect(document.acceptedAt).toBe(acceptedAt);
@@ -120,8 +120,8 @@ describe('SunatResultsProcessor', () => {
     });
     const processor = new SunatResultsProcessor(dataSource(manager), objectStorage(storedPayload));
 
-    await processor.process({ data: verifiedResult } as Job<SunatResultEnvelope>);
-    await processor.process({ data: verifiedResult } as Job<SunatResultEnvelope>);
+    await processor.process({ data: verifiedResult } as TaskJob<SunatResultEnvelope>);
+    await processor.process({ data: verifiedResult } as TaskJob<SunatResultEnvelope>);
 
     expect(sync.status).toBe('failed');
     expect(sync.resultSummary).toEqual({
@@ -147,7 +147,7 @@ describe('SunatResultsProcessor', () => {
     const processor = new SunatResultsProcessor(dataSource(manager), objectStorage(storedPayload));
 
     await expect(
-      processor.process({ data: verifiedResult } as Job<SunatResultEnvelope>),
+      processor.process({ data: verifiedResult } as TaskJob<SunatResultEnvelope>),
     ).rejects.toThrow('Artifact object key does not belong to the fiscal document');
 
     expect(document.status).toBe('queued');
@@ -184,7 +184,7 @@ describe('SunatResultsProcessor', () => {
     });
     const processor = new SunatResultsProcessor(dataSource(manager), storage);
 
-    await processor.process({ data: verifiedResult } as Job<SunatResultEnvelope>);
+    await processor.process({ data: verifiedResult } as TaskJob<SunatResultEnvelope>);
 
     const importedEvents = created.filter(
       (entry) =>

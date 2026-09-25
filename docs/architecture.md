@@ -10,15 +10,15 @@ flowchart LR
   API -->|Bearer interno| Hooks[webhook-service]
   Core --> Outbox[Outbox durable]
   Worker[billing-worker] --> Core
-  Worker -->|BullMQ| Sunat
+  Worker -->|SQS| Sunat
   Sunat --> SunatDb[(billing_sunat)]
-  Sunat -->|resultados BullMQ| Worker
-  Worker -->|eventos BullMQ| Hooks
+  Sunat -->|resultados SQS| Worker
+  Worker -->|eventos SQS| Hooks
   Hooks --> DeliveryDb[(billing_delivery)]
   API --> R2[(R2 privado)]
   Worker --> R2
   Sunat --> R2
-  Queue[(Redis AOF)] --- Worker
+  Queue[(Amazon SQS + DLQ)] --- Worker
   Queue --- Sunat
   Queue --- Hooks
 ```
@@ -43,7 +43,7 @@ referencias inmutables de objetos.
    una transacción `SERIALIZABLE`, reserva el correlativo, guarda el snapshot y
    crea un evento outbox.
 3. El worker guarda el snapshot canónico en R2 con SHA-256 y publica un comando
-   BullMQ cuyo `jobId` estable es el `eventId`.
+   SQS con `eventId` estable. Los inbox/ledger de PostgreSQL deduplican las entregas.
 4. SUNAT reclama el comando en su ledger, construye UBL y guarda artefactos. Un
    resultado versionado vuelve a Core.
 5. Core aplica el resultado una sola vez mediante inbox, registra la transición y
@@ -94,5 +94,5 @@ por hash y `If-None-Match: *`, por lo que una carrera no puede sobrescribirlos.
 El monorepo permite desplegar los cuatro procesos por separado hoy. Si el volumen
 lo exige, las siguientes divisiones naturales son un servicio de renderizado y un
 servicio dedicado de recepción. Fiscal Domain y Contracts deben seguir siendo
-paquetes puros; las reglas de negocio no deben depender de NestJS, TypeORM, Redis
+paquetes puros; las reglas de negocio no deben depender de NestJS, TypeORM, SQS
 ni R2.

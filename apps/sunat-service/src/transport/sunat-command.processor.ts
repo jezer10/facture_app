@@ -1,6 +1,7 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { DeferredTaskError } from '@app/platform';
+import { QueueProcessor, TaskWorker } from '@app/platform';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Job, UnrecoverableError } from 'bullmq';
+import { TaskJob, NonRetryableJobError } from '@app/platform';
 
 import { SUNAT_COMMAND_JOB, SUNAT_COMMANDS_QUEUE, type SunatCommandEnvelope } from '@app/contracts';
 import {
@@ -11,25 +12,25 @@ import {
 } from '@app/sunat';
 
 import { commandBackoffMs } from '../runtime-config';
-import { BullMqSunatEventPublisher } from './bullmq-sunat-event-publisher';
+import { SqsSunatEventPublisher } from './sqs-sunat-event-publisher';
 
 @Injectable()
-@Processor(SUNAT_COMMANDS_QUEUE, { concurrency: 4 })
-export class SunatCommandProcessor extends WorkerHost {
+@QueueProcessor(SUNAT_COMMANDS_QUEUE, { concurrency: 4 })
+export class SunatCommandProcessor extends TaskWorker {
   private readonly logger = new Logger(SunatCommandProcessor.name);
 
   constructor(
     private readonly executor: SunatCommandExecutor,
-    private readonly publisher: BullMqSunatEventPublisher,
+    private readonly publisher: SqsSunatEventPublisher,
     @Inject(SUNAT_COMMAND_LEDGER_PORT)
     private readonly ledger: SunatCommandLedgerPort<CompletedSunatCommand>,
   ) {
     super();
   }
 
-  async process(job: Job<SunatCommandEnvelope>): Promise<void> {
+  async process(job: TaskJob<SunatCommandEnvelope>): Promise<void> {
     if (job.name !== SUNAT_COMMAND_JOB) {
-      throw new UnrecoverableError('SUNAT_UNKNOWN_JOB');
+      throw new NonRetryableJobError('SUNAT_UNKNOWN_JOB');
     }
 
     const maxAttempts = job.opts.attempts ?? 1;
@@ -41,6 +42,8 @@ export class SunatCommandProcessor extends WorkerHost {
     });
 
     if (decision.kind === 'retry') {
+      if (decision.error.code === 'SUNAT_COMMAND_ALREADY_PROCESSING')
+        throw new DeferredTaskError(300);
       this.logger.warn(
         safeLog('retry', job.data, {
           code: decision.error.code,

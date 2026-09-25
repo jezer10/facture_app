@@ -38,16 +38,15 @@ describe('TypeOrmCommandLedgerAdapter', () => {
     expect(query.mock.calls[1]?.[1]).toEqual(['event-1', 1, 60_000]);
   });
 
-  it('lets a later BullMQ attempt recover the prior processing lease immediately', async () => {
+  it('does not let an SQS redelivery steal an active processing lease', async () => {
     const query = queryMock()
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ event_id: 'event-1' }]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ status: 'processing', result: null }]);
     const adapter = new TypeOrmCommandLedgerAdapter(dataSource(query));
-
-    await expect(adapter.reserve('event-1', 2)).resolves.toEqual({ state: 'acquired' });
-
-    expect(query.mock.calls[1]?.[0]).toContain('processing_attempt < $2');
-    expect(query.mock.calls[1]?.[1]).toEqual(['event-1', 2, 300_000]);
+    await expect(adapter.reserve('event-1', 2)).resolves.toEqual({ state: 'processing' });
+    expect(query.mock.calls[1]?.[0]).not.toContain('processing_attempt < $2');
+    expect(query.mock.calls[1]?.[0]).toContain('locked_at < now()');
   });
 
   it('stages a completed command for durable result delivery', async () => {

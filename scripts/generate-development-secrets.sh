@@ -19,10 +19,6 @@ generate_secret postgres_admin_password 32
 generate_secret core_db_password 32
 generate_secret sunat_db_password 32
 generate_secret webhook_db_password 32
-generate_secret redis_health_password 32
-generate_secret redis_worker_password 32
-generate_secret redis_sunat_password 32
-generate_secret redis_webhook_password 32
 generate_secret jwt_secret 48
 generate_secret api_key_pepper 32
 generate_secret api_key_replay_key 32

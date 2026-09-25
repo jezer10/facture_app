@@ -1,0 +1,699 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Facture asynchronous queues: four standard SQS queues, isolated dead-letter queues and unattached least-privilege runtime policies. SUNAT beta remains a separate application setting.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    }
+  },
+  "Parameters": {
+    "QueuePrefix": {
+      "Type": "String",
+      "Default": "facture-beta",
+      "AllowedPattern": "[a-zA-Z0-9_-]{1,35}",
+      "Description": "Must match SQS_QUEUE_PREFIX; changing it replaces queues."
+    }
+  },
+  "Resources": {
+    "CommandsDlq": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Preserve failed tasks for investigation and deliberate replay",
+          "must": [
+            "Retain messages 14 days; only corresponding source may redrive"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-sunat-commands-v1-dlq"
+        },
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true,
+        "RedriveAllowPolicy": {
+          "redrivePermission": "byQueue",
+          "sourceQueueArns": [
+            {
+              "Fn::Sub": "arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${QueuePrefix}-billing-sunat-commands-v1"
+            }
+          ]
+        }
+      }
+    },
+    "CommandsQueue": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Buffer asynchronous billing work; standard queue with PostgreSQL idempotency",
+          "must": [
+            "Consumers extend visibility and acknowledge after durable completion",
+            "Preserve names referenced by SQS_QUEUE_PREFIX"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-sunat-commands-v1"
+        },
+        "VisibilityTimeout": 120,
+        "ReceiveMessageWaitTimeSeconds": 20,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "CommandsDlq",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 20
+        }
+      }
+    },
+    "ResultsDlq": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Preserve failed tasks for investigation and deliberate replay",
+          "must": [
+            "Retain messages 14 days; only corresponding source may redrive"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-sunat-results-v1-dlq"
+        },
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true,
+        "RedriveAllowPolicy": {
+          "redrivePermission": "byQueue",
+          "sourceQueueArns": [
+            {
+              "Fn::Sub": "arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${QueuePrefix}-billing-sunat-results-v1"
+            }
+          ]
+        }
+      }
+    },
+    "ResultsQueue": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Buffer asynchronous billing work; standard queue with PostgreSQL idempotency",
+          "must": [
+            "Consumers extend visibility and acknowledge after durable completion",
+            "Preserve names referenced by SQS_QUEUE_PREFIX"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-sunat-results-v1"
+        },
+        "VisibilityTimeout": 120,
+        "ReceiveMessageWaitTimeSeconds": 20,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "ResultsDlq",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 20
+        }
+      }
+    },
+    "ArtifactsDlq": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Preserve failed tasks for investigation and deliberate replay",
+          "must": [
+            "Retain messages 14 days; only corresponding source may redrive"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-core-artifacts-v1-dlq"
+        },
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true,
+        "RedriveAllowPolicy": {
+          "redrivePermission": "byQueue",
+          "sourceQueueArns": [
+            {
+              "Fn::Sub": "arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${QueuePrefix}-billing-core-artifacts-v1"
+            }
+          ]
+        }
+      }
+    },
+    "ArtifactsQueue": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Buffer asynchronous billing work; standard queue with PostgreSQL idempotency",
+          "must": [
+            "Consumers extend visibility and acknowledge after durable completion",
+            "Preserve names referenced by SQS_QUEUE_PREFIX"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-core-artifacts-v1"
+        },
+        "VisibilityTimeout": 120,
+        "ReceiveMessageWaitTimeSeconds": 20,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "ArtifactsDlq",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 20
+        }
+      }
+    },
+    "WebhooksDlq": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Preserve failed tasks for investigation and deliberate replay",
+          "must": [
+            "Retain messages 14 days; only corresponding source may redrive"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-webhooks-v1-dlq"
+        },
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true,
+        "RedriveAllowPolicy": {
+          "redrivePermission": "byQueue",
+          "sourceQueueArns": [
+            {
+              "Fn::Sub": "arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${QueuePrefix}-billing-webhooks-v1"
+            }
+          ]
+        }
+      }
+    },
+    "WebhooksQueue": {
+      "Type": "AWS::SQS::Queue",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Buffer asynchronous billing work; standard queue with PostgreSQL idempotency",
+          "must": [
+            "Consumers extend visibility and acknowledge after durable completion",
+            "Preserve names referenced by SQS_QUEUE_PREFIX"
+          ]
+        }
+      },
+      "Properties": {
+        "QueueName": {
+          "Fn::Sub": "${QueuePrefix}-billing-webhooks-v1"
+        },
+        "VisibilityTimeout": 120,
+        "ReceiveMessageWaitTimeSeconds": 20,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "WebhooksDlq",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 20
+        }
+      }
+    },
+    "RequireTls": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Require TLS for all queue access",
+          "must": [
+            "Deny cleartext; grant no public permissions"
+          ]
+        }
+      },
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "CommandsDlq"
+          },
+          {
+            "Ref": "CommandsQueue"
+          },
+          {
+            "Ref": "ResultsDlq"
+          },
+          {
+            "Ref": "ResultsQueue"
+          },
+          {
+            "Ref": "ArtifactsDlq"
+          },
+          {
+            "Ref": "ArtifactsQueue"
+          },
+          {
+            "Ref": "WebhooksDlq"
+          },
+          {
+            "Ref": "WebhooksQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "sqs:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CommandsDlq",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "CommandsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ResultsDlq",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ResultsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactsDlq",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksDlq",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksQueue",
+                    "Arn"
+                  ]
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "WorkerPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime least privilege for worker service",
+          "must": [
+            "Attach to a dedicated runtime identity; no administrative SQS permissions"
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Facture SQS runtime permissions for Worker",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:GetQueueAttributes"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CommandsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ResultsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:ChangeMessageVisibility"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ResultsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactsQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CommandsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ResultsDlq",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ArtifactsDlq",
+                    "Arn"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "SunatPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime least privilege for sunat service",
+          "must": [
+            "Attach to a dedicated runtime identity; no administrative SQS permissions"
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Facture SQS runtime permissions for Sunat",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:GetQueueAttributes"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CommandsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ResultsQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:ChangeMessageVisibility"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CommandsQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CommandsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ResultsQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "CommandsDlq",
+                    "Arn"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "WebhookPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime least privilege for webhook service",
+          "must": [
+            "Attach to a dedicated runtime identity; no administrative SQS permissions"
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Facture SQS runtime permissions for Webhook",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:GetQueueAttributes"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:ChangeMessageVisibility"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "WebhooksDlq",
+                    "Arn"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "CommandsQueueUrl": {
+      "Description": "Commands queue URL",
+      "Value": {
+        "Ref": "CommandsQueue"
+      }
+    },
+    "CommandsDlqUrl": {
+      "Description": "Commands failed-message queue URL",
+      "Value": {
+        "Ref": "CommandsDlq"
+      }
+    },
+    "ResultsQueueUrl": {
+      "Description": "Results queue URL",
+      "Value": {
+        "Ref": "ResultsQueue"
+      }
+    },
+    "ResultsDlqUrl": {
+      "Description": "Results failed-message queue URL",
+      "Value": {
+        "Ref": "ResultsDlq"
+      }
+    },
+    "ArtifactsQueueUrl": {
+      "Description": "Artifacts queue URL",
+      "Value": {
+        "Ref": "ArtifactsQueue"
+      }
+    },
+    "ArtifactsDlqUrl": {
+      "Description": "Artifacts failed-message queue URL",
+      "Value": {
+        "Ref": "ArtifactsDlq"
+      }
+    },
+    "WebhooksQueueUrl": {
+      "Description": "Webhooks queue URL",
+      "Value": {
+        "Ref": "WebhooksQueue"
+      }
+    },
+    "WebhooksDlqUrl": {
+      "Description": "Webhooks failed-message queue URL",
+      "Value": {
+        "Ref": "WebhooksDlq"
+      }
+    },
+    "WorkerPolicyArn": {
+      "Description": "Attach this policy to the worker runtime identity",
+      "Value": {
+        "Ref": "WorkerPolicy"
+      }
+    },
+    "SunatPolicyArn": {
+      "Description": "Attach this policy to the sunat runtime identity",
+      "Value": {
+        "Ref": "SunatPolicy"
+      }
+    },
+    "WebhookPolicyArn": {
+      "Description": "Attach this policy to the webhook runtime identity",
+      "Value": {
+        "Ref": "WebhookPolicy"
+      }
+    },
+    "AccountId": {
+      "Description": "Set SQS_ACCOUNT_ID to this value",
+      "Value": {
+        "Ref": "AWS::AccountId"
+      }
+    },
+    "Region": {
+      "Description": "Set AWS_REGION to this value",
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    }
+  }
+}

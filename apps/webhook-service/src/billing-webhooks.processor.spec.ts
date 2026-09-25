@@ -5,13 +5,13 @@ import {
   TransientWebhookDeliveryError,
   type WebhookDeliveryService,
 } from '@app/webhooks';
-import type { Job } from 'bullmq';
-import { UnrecoverableError } from 'bullmq';
+import type { TaskJob } from '@app/platform';
+import { NonRetryableJobError } from '@app/platform';
 
 import { BillingWebhooksProcessor } from './billing-webhooks.processor';
 
 describe('BillingWebhooksProcessor', () => {
-  it('passes BullMQ attempt numbers to the delivery service', async () => {
+  it('passes SQS attempt numbers to the delivery service', async () => {
     const deliver = jest.fn().mockResolvedValue({
       delivered: 1,
       permanentlyFailed: 0,
@@ -24,7 +24,7 @@ describe('BillingWebhooksProcessor', () => {
     expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ eventId: 'evt_123' }), 3, 3);
   });
 
-  it('lets only typed transient errors reach BullMQ retry handling', async () => {
+  it('lets only typed transient errors reach SQS retry handling', async () => {
     const transientError = new TransientWebhookDeliveryError(
       'REMOTE_SERVER_ERROR',
       'Temporary remote failure',
@@ -47,9 +47,11 @@ describe('BillingWebhooksProcessor', () => {
     );
 
     await expect(permanentProcessor.process(createJob())).rejects.toBeInstanceOf(
-      UnrecoverableError,
+      NonRetryableJobError,
     );
-    await expect(unknownProcessor.process(createJob())).rejects.toBeInstanceOf(UnrecoverableError);
+    await expect(unknownProcessor.process(createJob())).rejects.toBeInstanceOf(
+      NonRetryableJobError,
+    );
   });
 
   it('rejects unknown names without running a delivery', async () => {
@@ -57,7 +59,7 @@ describe('BillingWebhooksProcessor', () => {
     const processor = createProcessor(deliver);
 
     await expect(processor.process(createJob({ name: 'unknown-job' }))).rejects.toBeInstanceOf(
-      UnrecoverableError,
+      NonRetryableJobError,
     );
     expect(deliver).not.toHaveBeenCalled();
   });
@@ -69,13 +71,13 @@ function createProcessor(deliver: jest.Mock): BillingWebhooksProcessor {
 
 function createJob(
   overrides: { readonly attemptsMade?: number; readonly name?: string } = {},
-): Job<WebhookEventEnvelope, void, string> {
+): TaskJob<WebhookEventEnvelope> {
   return {
     attemptsMade: overrides.attemptsMade ?? 0,
     data: createEnvelope(),
     name: overrides.name ?? WEBHOOK_DELIVERY_JOB,
     opts: { attempts: 3 },
-  } as Job<WebhookEventEnvelope, void, string>;
+  } as TaskJob<WebhookEventEnvelope>;
 }
 
 function createEnvelope(): WebhookEventEnvelope {

@@ -1,4 +1,4 @@
-import { BullModule } from '@nestjs/bullmq';
+import { SqsQueueModule } from '@app/platform';
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
@@ -15,7 +15,7 @@ import { SunatResultsProcessor } from './sunat-results.processor';
   imports: [
     ScheduleModule.forRoot(),
     ObjectStorageModule,
-    BullModule.registerQueue(
+    SqsQueueModule.registerQueue(
       { name: SUNAT_COMMANDS_QUEUE },
       { name: SUNAT_RESULTS_QUEUE },
       { name: WEBHOOKS_QUEUE },

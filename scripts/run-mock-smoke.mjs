@@ -4,6 +4,11 @@ import { createHmac } from 'node:crypto';
 import { readFileSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const beta = process.argv.includes('--beta');
+const reuseIndex = process.argv.indexOf('--reuse');
+const reuse =
+  reuseIndex >= 0 ? JSON.parse(readFileSync(process.argv[reuseIndex + 1], 'utf8')) : null;
+if (reuse && (!beta || typeof reuse.subject !== 'string'))
+  throw new Error('--reuse requires beta access metadata with the owner subject');
 const configIndex = process.argv.indexOf('--config');
 if (beta && (configIndex < 0 || !process.argv[configIndex + 1]))
   throw new Error('Use --beta --config <beta.json>');
@@ -14,7 +19,8 @@ if (beta && (configIndex < 0 || betaConfig.environment !== 'beta'))
   throw new Error('Use --beta --config <beta.json>');
 const apiUrl = withoutTrailingSlash(process.env.BILLING_API_URL ?? 'http://localhost:3300');
 const jwtSecretPath = process.env.BILLING_JWT_SECRET_FILE ?? 'deploy/secrets/local/jwt_secret';
-const subject = `local-smoke-${Date.now()}`;
+const subject = reuse?.subject ?? `local-smoke-${Date.now()}`;
+if (reuse && reuse.apiUrl !== apiUrl) throw new Error('Reuse metadata belongs to a different API');
 const suffix = String(Date.now()).slice(-8);
 const issuerRuc = beta ? betaConfig.issuer.ruc : peruvianRuc(`20${suffix}`);
 const customerRuc = peruvianRuc(
@@ -28,37 +34,43 @@ const actualMode = await fetch(`${apiUrl}/api/v1/health/mode`).then((r) => r.jso
 if (actualMode.sunat !== (beta ? 'beta' : 'mock'))
   throw new Error('API mode does not match the requested smoke test.');
 const platformToken = createDevelopmentJwt(readSecret(jwtSecretPath), subject);
-const organization = await request('/api/v1/organizations', {
-  method: 'POST',
-  token: platformToken,
-  body: {
-    name: `Smoke ${suffix}`,
-    slug: `smoke-${Date.now()}`,
-    ownerSubject: subject,
-  },
-});
+const organization = reuse
+  ? { id: requiredString(reuse, 'organizationId') }
+  : await request('/api/v1/organizations', {
+      method: 'POST',
+      token: platformToken,
+      body: {
+        name: `Smoke ${suffix}`,
+        slug: `smoke-${Date.now()}`,
+        ownerSubject: subject,
+      },
+    });
 const organizationId = requiredString(organization, 'id');
 const organizationToken = createDevelopmentJwt(readSecret(jwtSecretPath), subject, organizationId);
 
-const issuer = await request('/api/v1/issuers', {
-  method: 'POST',
-  token: organizationToken,
-  body: {
-    ruc: issuerRuc,
-    legalName: beta ? betaConfig.issuer.legalName : `Smoke Emisor ${suffix} SAC`,
-  },
-});
+const issuer = reuse
+  ? { id: requiredString(reuse, 'issuerId') }
+  : await request('/api/v1/issuers', {
+      method: 'POST',
+      token: organizationToken,
+      body: {
+        ruc: issuerRuc,
+        legalName: beta ? betaConfig.issuer.legalName : `Smoke Emisor ${suffix} SAC`,
+      },
+    });
 const issuerId = requiredString(issuer, 'id');
 
-const series = await request(`/api/v1/issuers/${issuerId}/series`, {
-  method: 'POST',
-  token: organizationToken,
-  body: {
-    documentType: '01',
-    series: beta ? 'FAPI' : 'F001',
-    nextNumber: beta ? Number(suffix) : 1,
-  },
-});
+const series = reuse
+  ? { id: requiredString(reuse, 'seriesId') }
+  : await request(`/api/v1/issuers/${issuerId}/series`, {
+      method: 'POST',
+      token: organizationToken,
+      body: {
+        documentType: '01',
+        series: beta ? 'FAPI' : 'F001',
+        nextNumber: beta ? Number(suffix) : 1,
+      },
+    });
 const seriesId = requiredString(series, 'id');
 
 const serviceAccount = await request('/api/v1/service-accounts', {
@@ -118,7 +130,7 @@ if (beta) {
   writeFileSync(
     'output/sunat-beta/api-access.json',
     JSON.stringify(
-      { apiUrl, organizationId, issuerId, seriesId, serviceAccountId, apiKey, documentId },
+      { apiUrl, organizationId, issuerId, seriesId, serviceAccountId, apiKey, documentId, subject },
       null,
       2,
     ) + '\n',

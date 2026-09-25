@@ -1,6 +1,6 @@
-import { InjectQueue } from '@nestjs/bullmq';
+import { InjectTaskQueue } from '@app/platform';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 
 import { SUNAT_COMMANDS_QUEUE, SUNAT_RESULTS_QUEUE } from '@app/contracts';
 import {
@@ -53,10 +53,10 @@ export class SunatHealthService {
     private readonly ledger: SunatCommandLedgerPort,
     @Inject(SUNAT_SUBMISSION_JOURNAL_PORT)
     private readonly submissionJournal: SunatSubmissionJournalPort,
-    @InjectQueue(SUNAT_COMMANDS_QUEUE)
-    private readonly commandQueue: Queue,
-    @InjectQueue(SUNAT_RESULTS_QUEUE)
-    private readonly resultQueue: Queue,
+    @InjectTaskQueue(SUNAT_COMMANDS_QUEUE)
+    private readonly commandQueue: TaskQueue,
+    @InjectTaskQueue(SUNAT_RESULTS_QUEUE)
+    private readonly resultQueue: TaskQueue,
   ) {}
 
   async readiness(): Promise<SunatReadinessReport> {
@@ -103,15 +103,12 @@ export class SunatHealthService {
 
   private async queueReadiness(): Promise<{ ready: boolean; detail?: string }> {
     try {
-      await Promise.all([
-        this.commandQueue.getJobCounts('waiting'),
-        this.resultQueue.getJobCounts('waiting'),
-      ]);
+      await Promise.all([this.commandQueue.healthCheck(), this.resultQueue.healthCheck()]);
       return { ready: true };
     } catch {
       return {
         ready: false,
-        detail: 'Redis/BullMQ no está disponible.',
+        detail: 'Amazon SQS no está disponible.',
       };
     }
   }

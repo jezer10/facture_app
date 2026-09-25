@@ -1,4 +1,4 @@
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 
 import type {
   IssuerCredentialPort,
@@ -23,10 +23,10 @@ describe('SunatHealthService', () => {
     expect(report.checks.signer?.detail).toContain('no firmado');
   });
 
-  it('becomes unready instead of falling back when Redis is unavailable', async () => {
+  it('becomes unready instead of falling back when SQS is unavailable', async () => {
     const unavailableQueue = {
-      getJobCounts: jest.fn().mockRejectedValue(new Error('redis unavailable')),
-    } as unknown as Queue;
+      healthCheck: jest.fn().mockRejectedValue(new Error('sqs unavailable')),
+    } as unknown as TaskQueue;
     const service = healthService(unavailableQueue);
 
     const report = await service.readiness();
@@ -34,12 +34,12 @@ describe('SunatHealthService', () => {
     expect(report.status).toBe('not_ready');
     expect(report.checks.queues).toEqual({
       ready: false,
-      detail: 'Redis/BullMQ no está disponible.',
+      detail: 'Amazon SQS no está disponible.',
     });
   });
 });
 
-function healthService(queue: Queue = readyQueue()): SunatHealthService {
+function healthService(queue: TaskQueue = readyQueue()): SunatHealthService {
   const provider = {
     health: jest.fn().mockResolvedValue({
       ready: true,
@@ -75,8 +75,8 @@ function healthService(queue: Queue = readyQueue()): SunatHealthService {
   );
 }
 
-function readyQueue(): Queue {
+function readyQueue(): TaskQueue {
   return {
-    getJobCounts: jest.fn().mockResolvedValue({ waiting: 0 }),
-  } as unknown as Queue;
+    healthCheck: jest.fn().mockResolvedValue({ waiting: 0 }),
+  } as unknown as TaskQueue;
 }

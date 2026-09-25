@@ -1,4 +1,4 @@
-import type { Job } from 'bullmq';
+import type { TaskJob } from '@app/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { PdfRenderEnvelope, PublicDocumentStatus } from '@app/contracts';
 import { canonicalJson, sha256, type ObjectStoragePort } from '@app/platform';
@@ -158,7 +158,7 @@ function fiscalDocument(
   });
 }
 
-function pdfJob(document: FiscalDocumentEntity): Job<PdfRenderEnvelope> {
+function pdfJob(document: FiscalDocumentEntity): TaskJob<PdfRenderEnvelope> {
   return {
     data: {
       eventId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4',
@@ -172,7 +172,7 @@ function pdfJob(document: FiscalDocumentEntity): Job<PdfRenderEnvelope> {
       payloadSha256: document.snapshotSha256,
       payload: { documentId: document.id },
     },
-  } as Job<PdfRenderEnvelope>;
+  } as TaskJob<PdfRenderEnvelope>;
 }
 
 function fluentInsertBuilder(): {

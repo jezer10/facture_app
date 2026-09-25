@@ -3,7 +3,7 @@
 Plataforma fiscal multi-tenant para centralizar la emisión y recepción de CPE de
 varios servicios internos. La API pública es asíncrona: registra el documento y su
 correlativo en PostgreSQL, responde `202`, y procesa SUNAT, artefactos y webhooks a
-través de BullMQ.
+través de Amazon SQS.
 
 > **Estado fiscal:** el flujo distribuido funciona con simulador y con SUNAT beta
 > para facturas simples; incluye PDF y correo local. La emisión fiscal productiva
@@ -41,8 +41,8 @@ El diagrama, los límites de datos y las garantías de entrega están en
 [`docs/architecture.md`](docs/architecture.md).
 
 Fiscal Core, SUNAT y Delivery tienen bases y usuarios PostgreSQL separados. No hay
-claves foráneas ni entidades ORM compartidas entre esos límites. Redis se configura
-con AOF y `noeviction`; R2 es privado y usa object keys inmutables.
+claves foráneas ni entidades ORM compartidas entre esos límites. SQS usa colas estándar con DLQ e idempotencia en PostgreSQL; R2 es privado y usa
+object keys inmutables.
 
 ## Requisitos
 
@@ -61,10 +61,11 @@ pnpm dev:local
 ```
 
 El comando genera secretos privados sin sobrescribir los existentes, inicia
-PostgreSQL, Redis y MinIO en Docker, crea el bucket privado, aplica las migraciones,
+PostgreSQL, LocalStack (SQS local), Mailpit y MinIO en Docker, crea el bucket privado, aplica las migraciones,
 instala Chromium para los PDF, compila y ejecuta los cuatro servicios con Node.js.
 SUNAT funciona en modo simulado; las bases de datos, colas y archivos son locales
-y persistentes. No requiere credenciales R2 ni realiza envíos fiscales reales.
+sin recursos AWS. PostgreSQL y MinIO son persistentes; las colas del emulador son
+temporales. No requiere credenciales AWS/R2 ni realiza envíos fiscales reales.
 
 | Servicio          | Dirección                                 |
 | ----------------- | ----------------------------------------- |
@@ -73,7 +74,7 @@ y persistentes. No requiere credenciales R2 ni realiza envíos fiscales reales.
 | Consola MinIO     | http://localhost:59001                    |
 | Endpoint S3 MinIO | http://127.0.0.1:59000                    |
 | PostgreSQL        | 127.0.0.1:54330                           |
-| Redis             | 127.0.0.1:56379                           |
+| Emulador SQS      | http://127.0.0.1:59324                    |
 
 El usuario y contraseña de MinIO están en `deploy/secrets/local/minio_access_key`
 y `deploy/secrets/local/minio_secret_key`. Sólo para este entorno local, los
@@ -109,8 +110,9 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
    ./scripts/generate-development-secrets.sh
    ```
 
-2. Agrega manualmente en `deploy/secrets/local` las seis credenciales R2 descritas
-   en `deploy/secret-templates/README.md`.
+2. Provisiona SQS en tu cuenta según `deploy/sqs/README.md`. Agrega en
+   `deploy/secrets/local` las credenciales AWS por servicio y las seis credenciales R2
+   descritas en `deploy/secret-templates/README.md`.
 
 3. Exporta únicamente configuración no secreta:
 
@@ -120,6 +122,9 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
    export BILLING_TRUSTED_PROXY_CIDRS=172.30.250.1/32
    export R2_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
    export R2_BUCKET=billing-private
+   export AWS_REGION=us-east-1
+   export SQS_ACCOUNT_ID=TU_ID_DE_CUENTA_DE_12_DIGITOS
+   export SQS_QUEUE_PREFIX=facture-beta
    ```
 
    No uses `0.0.0.0/0` ni `::/0`: la API usa esta lista para obtener la IP real sin
@@ -152,7 +157,7 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
    ```
 
    El resultado lleva `mode: mock-no-fiscal-validity`: usa datos con forma real,
-   PostgreSQL, Redis y R2 reales, pero no se presenta ante SUNAT.
+   PostgreSQL, SQS y R2 reales, pero no se presenta ante SUNAT.
 
 ## Bootstrap administrativo
 
@@ -310,3 +315,11 @@ No se debe apuntar una prueba de carga al endpoint beta SUNAT.
 
 Para probar el flujo completo API → SUNAT beta → PDF → correo local, consulta
 [API beta y Mailpit](scripts/sunat-beta/README.md#api-distribuida-y-correo-local).
+
+La configuración de AWS, las garantías de entrega y el corte desde Redis están
+en [la guía de SQS](deploy/sqs/README.md).
+
+## Despliegue automático de beta
+
+Consulta [la guía del servidor y CI/CD](deploy/server/README.md). Los push a
+`develop` despliegan en Ubuntu ARM64 después de pasar CI; SUNAT sigue en beta.

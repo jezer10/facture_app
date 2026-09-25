@@ -1,4 +1,4 @@
-import type { Job } from 'bullmq';
+import type { TaskJob } from '@app/platform';
 
 import {
   SUNAT_COMMAND_JOB,
@@ -8,7 +8,7 @@ import {
 import type { SunatCommandExecutor } from '@app/sunat';
 import type { CompletedSunatCommand, SunatCommandLedgerPort } from '@app/sunat';
 
-import type { BullMqSunatEventPublisher } from './bullmq-sunat-event-publisher';
+import type { SqsSunatEventPublisher } from './sqs-sunat-event-publisher';
 import { SunatCommandProcessor } from './sunat-command.processor';
 
 describe('SunatCommandProcessor', () => {
@@ -20,7 +20,7 @@ describe('SunatCommandProcessor', () => {
     const markDelivered = jest.fn().mockResolvedValue(undefined);
     const processor = new SunatCommandProcessor(
       { execute } as unknown as SunatCommandExecutor,
-      { publishResult, publishFollowUp } as unknown as BullMqSunatEventPublisher,
+      { publishResult, publishFollowUp } as unknown as SqsSunatEventPublisher,
       { markDelivered } as unknown as SunatCommandLedgerPort<CompletedSunatCommand>,
     );
 
@@ -36,7 +36,7 @@ describe('SunatCommandProcessor', () => {
     expect(markDelivered).toHaveBeenCalledWith(commandFixture().eventId);
   });
 
-  it('throws only the typed safe code when BullMQ should retry', async () => {
+  it('throws only the typed safe code when SQS should retry', async () => {
     const execute = jest.fn().mockResolvedValue({
       kind: 'retry',
       error: { code: 'SUNAT_PROVIDER_UNAVAILABLE' },
@@ -48,7 +48,7 @@ describe('SunatCommandProcessor', () => {
       {
         publishResult,
         publishFollowUp: jest.fn(),
-      } as unknown as BullMqSunatEventPublisher,
+      } as unknown as SqsSunatEventPublisher,
       { markDelivered } as unknown as SunatCommandLedgerPort<CompletedSunatCommand>,
     );
 
@@ -59,7 +59,7 @@ describe('SunatCommandProcessor', () => {
 
   it('keeps the durable delivery pending when publishing fails', async () => {
     const output = { result: resultFixture() };
-    const publishResult = jest.fn().mockRejectedValue(new Error('redis unavailable'));
+    const publishResult = jest.fn().mockRejectedValue(new Error('sqs unavailable'));
     const markDelivered = jest.fn();
     const processor = new SunatCommandProcessor(
       {
@@ -68,11 +68,11 @@ describe('SunatCommandProcessor', () => {
       {
         publishResult,
         publishFollowUp: jest.fn(),
-      } as unknown as BullMqSunatEventPublisher,
+      } as unknown as SqsSunatEventPublisher,
       { markDelivered } as unknown as SunatCommandLedgerPort<CompletedSunatCommand>,
     );
 
-    await expect(processor.process(jobFixture())).rejects.toThrow('redis unavailable');
+    await expect(processor.process(jobFixture())).rejects.toThrow('sqs unavailable');
     expect(markDelivered).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe('SunatCommandProcessor', () => {
       {
         publishResult: jest.fn(),
         publishFollowUp: jest.fn(),
-      } as unknown as BullMqSunatEventPublisher,
+      } as unknown as SqsSunatEventPublisher,
       { markDelivered: jest.fn() } as unknown as SunatCommandLedgerPort<CompletedSunatCommand>,
     );
 
@@ -145,12 +145,14 @@ function resultFixture(): Extract<SunatResultEnvelope, { type: 'sunat.document.r
   };
 }
 
-function jobFixture(overrides: Partial<Job<SunatCommandEnvelope>> = {}): Job<SunatCommandEnvelope> {
+function jobFixture(
+  overrides: Partial<TaskJob<SunatCommandEnvelope>> = {},
+): TaskJob<SunatCommandEnvelope> {
   return {
     name: SUNAT_COMMAND_JOB,
     data: commandFixture(),
     opts: { attempts: 4 },
     attemptsMade: 0,
     ...overrides,
-  } as Job<SunatCommandEnvelope>;
+  } as TaskJob<SunatCommandEnvelope>;
 }

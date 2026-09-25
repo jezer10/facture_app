@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
+import { InjectTaskQueue } from '@app/platform';
 import { InjectDataSource } from '@nestjs/typeorm';
-import type { Queue } from 'bullmq';
+import type { TaskQueue } from '@app/platform';
 import { DataSource } from 'typeorm';
 import { CORE_ARTIFACTS_QUEUE, SUNAT_COMMANDS_QUEUE, SUNAT_RESULTS_QUEUE } from '@app/contracts';
 import { PdfRendererService } from '@app/fiscal-core';
@@ -12,9 +12,9 @@ import type { ObjectStoragePort } from '@app/platform';
 export class WorkerHealthController {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
-    @InjectQueue(SUNAT_COMMANDS_QUEUE) private readonly commands: Queue,
-    @InjectQueue(SUNAT_RESULTS_QUEUE) private readonly results: Queue,
-    @InjectQueue(CORE_ARTIFACTS_QUEUE) private readonly artifacts: Queue,
+    @InjectTaskQueue(SUNAT_COMMANDS_QUEUE) private readonly commands: TaskQueue,
+    @InjectTaskQueue(SUNAT_RESULTS_QUEUE) private readonly results: TaskQueue,
+    @InjectTaskQueue(CORE_ARTIFACTS_QUEUE) private readonly artifacts: TaskQueue,
     @Inject(OBJECT_STORAGE_PORT) private readonly storage: ObjectStoragePort,
     private readonly pdfRenderer: PdfRendererService,
   ) {}
@@ -29,9 +29,9 @@ export class WorkerHealthController {
     try {
       await Promise.all([
         this.dataSource.query('SELECT 1'),
-        this.commands.getJobCounts('waiting'),
-        this.results.getJobCounts('waiting'),
-        this.artifacts.getJobCounts('waiting'),
+        this.commands.healthCheck(),
+        this.results.healthCheck(),
+        this.artifacts.healthCheck(),
         this.storage.healthCheck(),
         this.pdfRenderer.healthCheck(),
       ]);
