@@ -135,19 +135,12 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
    ```bash
    export BILLING_PUBLIC_URL=http://localhost:3300
    # El valor por defecto seguro de Compose es la gateway fija 172.30.250.1/32.
-   export BILLING_TRUSTED_PROXY_CIDRS=172.30.250.1/32
    export R2_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
    export R2_BUCKET=billing-private
    export AWS_REGION=us-east-1
    export SQS_ACCOUNT_ID=TU_ID_DE_CUENTA_DE_12_DIGITOS
    export SQS_QUEUE_PREFIX=facture-beta
    ```
-
-   No uses `0.0.0.0/0` ni `::/0`: la API usa esta lista para obtener la IP real sin
-   aceptar `X-Forwarded-For` de orígenes no confiables. Compose fija la red egress en
-   `172.30.250.0/24` y confía sólo en su gateway. Si ese rango colisiona o el proxy
-   corre en otra red, cambia juntos `BILLING_EGRESS_SUBNET`,
-   `BILLING_EGRESS_GATEWAY` y `BILLING_TRUSTED_PROXY_CIDRS`.
 
 4. Para usar el despliegue de Sandbox con SUNAT beta, configura su certificado de prueba:
 
@@ -340,3 +333,7 @@ en [la guía de SQS](deploy/sqs/README.md).
 
 Consulta [la guía del servidor y CI/CD](deploy/server/README.md). Los push a
 `master` despliegan en Ubuntu ARM64 después de pasar CI; SUNAT sigue en beta.
+
+La API escucha en `PORT` (3000 por defecto). `ConfigModule` valida las variables
+con Joi al arrancar. Swagger se publica en `/api/docs` en todos los ambientes,
+y su especificación OpenAPI en `/api/docs-json`.

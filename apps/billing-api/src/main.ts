@@ -1,21 +1,16 @@
 import 'reflect-metadata';
 import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { parseEnvironment } from '@app/platform';
+import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
+import type { BillingEnvironment } from '@app/platform';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const environment = parseEnvironment(process.env);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
-  if (environment.BILLING_TRUSTED_PROXY_CIDRS) {
-    app.set(
-      'trust proxy',
-      environment.BILLING_TRUSTED_PROXY_CIDRS.split(',').map((cidr) => cidr.trim()),
-    );
-  }
+  const config = app.get(ConfigService<BillingEnvironment, true>);
   app.use(helmet());
   app.useBodyParser('json', { limit: '3mb' });
   app.setGlobalPrefix('api/v1');
@@ -24,27 +19,20 @@ async function bootstrap(): Promise<void> {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
-      stopAtFirstError: false,
     }),
   );
   app.enableShutdownHooks();
 
-  if (environment.NODE_ENV !== 'production') {
-    const swagger = new DocumentBuilder()
-      .setTitle('Facture App Billing API')
-      .setDescription(
-        environment.SUNAT_PROVIDER_MODE === 'beta'
-          ? 'Facture Sandbox: SUNAT beta, sin validez fiscal. Datos y credenciales aislados por empresa y ambiente.'
-          : 'API de facturación',
-      )
-      .setVersion('1.0')
-      .addBearerAuth()
-      .addApiKey({ type: 'apiKey', name: 'Authorization', in: 'header' }, 'api-key')
-      .build();
-    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swagger));
-  }
+  const swagger = new DocumentBuilder()
+    .setTitle('Facture App Billing API')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'Authorization', in: 'header' }, 'api-key')
+    .build();
+  const documentFactory = (): OpenAPIObject => SwaggerModule.createDocument(app, swagger);
+  SwaggerModule.setup('api/docs', app, documentFactory);
 
-  await app.listen(environment.BILLING_API_PORT, '0.0.0.0');
+  await app.listen(config.get('PORT', { infer: true }));
 }
 
 void bootstrap();

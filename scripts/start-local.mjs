@@ -111,7 +111,7 @@ async function main() {
     SQS_ENDPOINT: 'http://127.0.0.1:59324',
     ALLOW_VOLATILE_ADAPTERS: 'false',
     BILLING_PUBLIC_URL: 'http://localhost:3300',
-    BILLING_API_PORT: '3300',
+    PORT: '3300',
     BILLING_WORKER_PORT: '3301',
     SUNAT_SERVICE_PORT: '3302',
     WEBHOOK_SERVICE_PORT: '3303',

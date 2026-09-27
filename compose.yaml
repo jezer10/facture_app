@@ -72,8 +72,7 @@ services:
     environment:
       <<: *common-environment
       BILLING_SERVICE: billing-api
-      BILLING_API_PORT: 3000
-      BILLING_TRUSTED_PROXY_CIDRS: ${BILLING_TRUSTED_PROXY_CIDRS:-172.31.250.1/32}
+      PORT: 3000
       CORE_DATABASE_URL: postgresql://billing_core@postgres:5432/billing_core
       CORE_DATABASE_PASSWORD_FILE: /run/secrets/core_db_password
       BILLING_JWT_SECRET_FILE: /run/secrets/jwt_secret

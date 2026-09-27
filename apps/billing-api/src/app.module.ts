@@ -12,7 +12,7 @@ import {
   ReceivedModule,
   RecipientQueryModule,
 } from '@app/fiscal-core';
-import { ObjectStorageModule, parseEnvironment } from '@app/platform';
+import { ObjectStorageModule, environmentSchema } from '@app/platform';
 import { AdminController } from './admin/admin.controller';
 import { AdministrativeIntegrationsController } from './admin/administrative-integrations.controller';
 import { InternalBillingServicesClient } from './admin/internal-billing-services.client';
@@ -31,7 +31,11 @@ import { TaxpayerRegistryController } from './companies/taxpayer-registry.contro
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: parseEnvironment }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      ignoreEnvFile: true,
+      validationSchema: environmentSchema,
+    }),
     CoreDatabaseModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     ObjectStorageModule,

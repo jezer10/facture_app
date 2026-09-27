@@ -76,6 +76,7 @@
     "decimal.js": "10.6.0",
     "fflate": "0.8.3",
     "helmet": "8.1.0",
+    "joi": "^18.2.9",
     "nodemailer": "10.0.10",
     "passport": "0.7.0",
     "passport-jwt": "4.0.1",

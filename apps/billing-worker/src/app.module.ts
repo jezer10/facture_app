@@ -8,12 +8,16 @@ import {
   WEBHOOKS_QUEUE,
 } from '@app/contracts';
 import { CoreDatabaseModule, PdfArtifactsWorkerModule, ReliabilityModule } from '@app/fiscal-core';
-import { ObjectStorageModule, parseEnvironment } from '@app/platform';
+import { ObjectStorageModule, environmentSchema } from '@app/platform';
 import { WorkerHealthController } from './health.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: parseEnvironment }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      ignoreEnvFile: true,
+      validationSchema: environmentSchema,
+    }),
     CoreDatabaseModule,
     SqsQueueModule.forRoot(),
     SqsQueueModule.registerQueue(

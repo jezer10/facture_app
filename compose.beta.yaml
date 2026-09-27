@@ -12,7 +12,6 @@ services:
     image: ${FACTURE_IMAGE_PREFIX}-runtime:${FACTURE_IMAGE_TAG}
     environment:
       <<: *beta-environment
-      BILLING_TRUSTED_PROXY_CIDRS: 172.31.250.10/32
   billing-worker:
     image: ${FACTURE_IMAGE_PREFIX}-runtime-worker:${FACTURE_IMAGE_TAG}
     environment:
