@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { parseEnvironment } from '@app/platform';
 
-import type { CreateFiscalDocumentInput, FiscalDocumentLineInput } from '@app/contracts';
+import type {
+  CreateFiscalDocumentInput,
+  FiscalDocumentLineInput,
+  InvoiceIssuerOption,
+} from '@app/contracts';
 import {
   assertDocumentStatusTransition,
   calculateFiscalDocument,
@@ -143,6 +147,38 @@ export class FiscalDocumentsService {
       take: limit,
     });
     return documents.map(toView);
+  }
+
+  async creationOptions(
+    principal: FiscalDocumentsPrincipal,
+  ): Promise<readonly InvoiceIssuerOption[]> {
+    const accessibleIds = await this.listAccessibleIssuerIds(principal);
+    if (accessibleIds?.length === 0) return [];
+    const issuers = await this.dataSource.getRepository(IssuerEntity).find({
+      where: {
+        organizationId: principal.organizationId,
+        active: true,
+        ...(accessibleIds ? { id: In(accessibleIds) } : {}),
+      },
+      order: { legalName: 'ASC' },
+    });
+    if (issuers.length === 0) return [];
+    const series = await this.dataSource.getRepository(IssuerSeriesEntity).find({
+      where: { issuerId: In(issuers.map((issuer) => issuer.id)), active: true },
+      order: { series: 'ASC' },
+    });
+    return issuers.map((issuer) => ({
+      id: issuer.id,
+      legalName: issuer.legalName,
+      ruc: issuer.ruc,
+      series: series
+        .filter((entry) => entry.issuerId === issuer.id)
+        .map((entry) => ({
+          id: entry.id,
+          series: entry.series,
+          documentType: entry.documentType,
+        })),
+    }));
   }
 
   async requestVoid(
@@ -871,6 +907,10 @@ function normalizeListPagination(query: ListFiscalDocumentsQuery): {
   return { limit, offset };
 }
 
+function snapshotText(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
 function toView(document: FiscalDocumentEntity): FiscalDocumentView {
   return Object.freeze({
     currency: document.currency,
@@ -885,6 +925,21 @@ function toView(document: FiscalDocumentEntity): FiscalDocumentView {
     snapshotSha256: document.snapshotSha256,
     status: document.status,
     totals: Object.freeze({ ...document.totals }),
+    customer: {
+      legalName: snapshotText(document.customerSnapshot.legalName),
+      identityNumber: snapshotText(document.customerSnapshot.identityNumber),
+      ...(typeof document.customerSnapshot.email === 'string'
+        ? { email: document.customerSnapshot.email }
+        : {}),
+    },
+    lines: (Array.isArray(document.fiscalSnapshot.lines) ? document.fiscalSnapshot.lines : [])
+      .filter((line): line is Record<string, unknown> => typeof line === 'object' && line !== null)
+      .map((line) => ({
+        description: snapshotText(line.description, ''),
+        quantity: snapshotText(line.quantity, '0'),
+        unitValue: snapshotText(line.unitValue, '0'),
+        payableAmount: snapshotText(line.payableAmount, '0'),
+      })),
   });
 }
 

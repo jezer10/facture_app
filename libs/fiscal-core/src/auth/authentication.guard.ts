@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -27,6 +28,8 @@ import type {
   HumanPrincipal,
 } from './auth.types';
 
+import { BrowserSessionService } from './browser-session.service';
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 @Injectable()
@@ -37,6 +40,7 @@ export class AuthenticationGuard implements CanActivate {
     private readonly jwt: JwtService,
     @InjectRepository(OrganizationMemberEntity)
     private readonly members: Repository<OrganizationMemberEntity>,
+    @Optional() private readonly browserSessions?: BrowserSessionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -52,6 +56,11 @@ export class AuthenticationGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     request.correlationId = readCorrelationId(request);
     const authorization = request.get('authorization');
+    if (!authorization && this.browserSessions) {
+      request.principal = await this.browserSessions.principal(request);
+      this.authorizeRoute(context, request.principal);
+      return true;
+    }
     if (!authorization) {
       throw new UnauthorizedException('Authorization header is required');
     }

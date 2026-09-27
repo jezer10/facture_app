@@ -7,3 +7,8 @@ export * from './documents';
 export * from './received';
 export * from './recipient';
 export * from './reliability';
+
+export * from './companies/company-registration.service';
+export { BrowserSessionService } from './auth/browser-session.service';
+
+export * from './taxpayer-registry/taxpayer-registry.service';

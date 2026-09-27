@@ -1,8 +1,4 @@
-import type {
-  CreateFiscalDocumentInput,
-  FiscalDocumentType,
-  PublicDocumentStatus,
-} from '@app/contracts';
+import type { CreateFiscalDocumentInput, PublicDocumentStatus } from '@app/contracts';
 
 interface BaseFiscalDocumentsPrincipal {
   readonly organizationId: string;
@@ -38,18 +34,4 @@ export interface RequestFiscalDocumentVoidCommand {
   readonly reason: string;
 }
 
-export interface FiscalDocumentView {
-  readonly id: string;
-  readonly organizationId: string;
-  readonly issuerId: string;
-  readonly documentType: FiscalDocumentType;
-  readonly series: string;
-  /** String preserves the full PostgreSQL bigint range without JSON precision loss. */
-  readonly number: string;
-  readonly issueDate: string;
-  readonly currency: 'PEN' | 'USD';
-  readonly status: PublicDocumentStatus;
-  readonly snapshotSha256: string;
-  readonly totals: Readonly<Record<string, string>>;
-  readonly referenceDocumentId: string | null;
-}
+export type { FiscalDocumentView } from '@app/contracts';

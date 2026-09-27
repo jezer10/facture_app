@@ -20,6 +20,14 @@ import { FiscalDocumentsController } from './documents/fiscal-documents.controll
 import { ReceivedController } from './received/received.controller';
 import { RecipientQueryController } from './recipient/recipient-query.controller';
 
+import { CompanyRegistrationService, TaxpayerRegistryService } from '@app/fiscal-core';
+import {
+  CompanyRegistrationController,
+  CompanyReviewController,
+} from './companies/company-registration.controller';
+
+import { TaxpayerRegistryController } from './companies/taxpayer-registry.controller';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: parseEnvironment }),
@@ -34,6 +42,9 @@ import { RecipientQueryController } from './recipient/recipient-query.controller
     RecipientQueryModule,
   ],
   controllers: [
+    TaxpayerRegistryController,
+    CompanyRegistrationController,
+    CompanyReviewController,
     AdminController,
     AdministrativeIntegrationsController,
     FiscalDocumentsController,
@@ -41,6 +52,11 @@ import { RecipientQueryController } from './recipient/recipient-query.controller
     ReceivedController,
     RecipientQueryController,
   ],
-  providers: [InternalBillingServicesClient, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    TaxpayerRegistryService,
+    CompanyRegistrationService,
+    InternalBillingServicesClient,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

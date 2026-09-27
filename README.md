@@ -32,6 +32,10 @@ No migra credenciales SOL ni borra datos del backend anterior.
 
 ## Arquitectura
 
+La arquitectura objetivo para compartir identidad, empresas y accesos entre Facture,
+sndr y brst está documentada en [Identidad y empresas compartidas](docs/shared-platform-identity.md).
+Distingue el núcleo central y el backoffice propuestos de la implementación actual.
+
 - `billing-api`: autenticación JWT/API key y API `/api/v1`.
 - `billing-worker`: outbox/inbox, resultados SUNAT y PDF/QR.
 - `sunat-service`: UBL, firma, envíos, conciliación, CDR y recepción.
@@ -87,6 +91,20 @@ En otra terminal, `pnpm smoke:mock` verifica la emisión simulada y los artefact
 `Ctrl+C` detiene las aplicaciones; `pnpm local:stop` detiene los contenedores sin
 borrar los datos. Vuelve a ejecutar `pnpm dev:local` para arrancar y recompilar.
 La configuración local está en `compose.local.yaml` y `scripts/start-local.mjs`.
+
+## Panel web de facturación
+
+El panel Vue 3 + TypeScript + Tailwind está en [`apps/billing-web`](apps/billing-web/README.md).
+Con la API local iniciada, ejecuta en otra terminal:
+
+```sh
+pnpm dev:web
+```
+
+Abre http://127.0.0.1:5173 e inicia sesión con el acceso central Cognito. Incluye
+listado paginado, filtros por estado/emisor, búsqueda en la página, emisión,
+detalle, descargas y anulación en simulación. La sesión se gestiona en el servidor con una cookie HttpOnly.
+Consulta la guía del panel para su estructura, pruebas y limitaciones de SUNAT beta.
 
 ## Prueba de conexión con SUNAT beta
 
@@ -161,8 +179,9 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
 
 ## Bootstrap administrativo
 
-La plataforma valida JWT emitidos por el proveedor administrativo; no implementa
-login ni almacena contraseñas humanas. Para desarrollo puede emitirse un JWT de
+El panel utiliza Cognito para el login de personas; consulta la
+[guía de identidad](deploy/identity/README.md). La plataforma conserva los JWT
+administrativos para bootstrap e integraciones existentes y no almacena contraseñas humanas. Para desarrollo puede emitirse un JWT de
 plataforma válido durante 15 minutos:
 
 ```bash

@@ -148,6 +148,34 @@ async function main() {
     R2_ACCESS_KEY_ID_FILE: secret('minio_access_key'),
     R2_SECRET_ACCESS_KEY_FILE: secret('minio_secret_key'),
   });
+  const identityConfig = secret('identity-config.json');
+  if (existsSync(identityConfig)) {
+    const identity = JSON.parse(readFileSync(identityConfig, 'utf8'));
+    for (const key of [
+      'BILLING_COGNITO_POOL_ID',
+      'BILLING_COGNITO_CLIENT_ID',
+      'BILLING_COGNITO_DOMAIN',
+      'BILLING_COGNITO_CLIENT_SECRET_FILE',
+      'BILLING_WEB_ORIGIN',
+    ]) {
+      if (typeof identity[key] !== 'string')
+        throw new Error('Invalid local identity configuration');
+      env[key] = identity[key];
+    }
+    const centralKeys = [
+      'BILLING_IDENTITY_ISSUER',
+      'BILLING_IDENTITY_CLIENT_ID',
+      'BILLING_IDENTITY_CLIENT_SECRET_FILE',
+      'BILLING_IDENTITY_DATA_KEY_FILE',
+    ];
+    if (centralKeys.some((key) => identity[key] !== undefined)) {
+      for (const key of centralKeys) {
+        if (typeof identity[key] !== 'string' || !identity[key])
+          throw new Error('Incomplete local central identity configuration');
+        env[key] = identity[key];
+      }
+    }
+  }
   const storage = new S3Client({
     endpoint: env.R2_ENDPOINT,
     region: env.R2_REGION,

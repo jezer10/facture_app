@@ -10,6 +10,16 @@ import { EnforceCoreTenantIsolation1787356980000 } from './migrations/2026082200
 import { AddApiKeyCreationIdempotency1787357040000 } from './migrations/202608220005-add-api-key-creation-idempotency';
 import { AddDocumentEmail1790208000000 } from './migrations/202609240001-add-document-email';
 
+import { AddBrowserAuth1790294400000 } from './migrations/202609250001-add-browser-auth';
+
+import { AddBrowserAccessInvites1790294460000 } from './migrations/202609250002-add-browser-access-invites';
+
+import { AddCompanyRegistrations1790294520000 } from './migrations/202609250003-add-company-registrations';
+
+import { AddNativeLoginChallenges1790294580000 } from './migrations/202609250004-add-native-login-challenges';
+
+import { AddBrowserIdentityTokens1790380800000 } from './migrations/202609260001-add-browser-identity-tokens';
+
 const environment = parseEnvironment(process.env);
 
 export const coreDataSourceOptions = {
@@ -26,6 +36,11 @@ export const coreDataSourceOptions = {
     EnforceCoreTenantIsolation1787356980000,
     AddApiKeyCreationIdempotency1787357040000,
     AddDocumentEmail1790208000000,
+    AddBrowserAuth1790294400000,
+    AddBrowserAccessInvites1790294460000,
+    AddCompanyRegistrations1790294520000,
+    AddNativeLoginChallenges1790294580000,
+    AddBrowserIdentityTokens1790380800000,
   ],
   migrationsTableName: 'typeorm_migrations',
   migrationsRun: false,
