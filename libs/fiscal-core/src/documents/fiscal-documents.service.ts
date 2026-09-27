@@ -1,7 +1,11 @@
+import { requireIssuingWorkspace } from '../companies/workspace-policy';
 import { randomUUID } from 'node:crypto';
-import { parseEnvironment } from '@app/platform';
 
-import type { CreateFiscalDocumentInput, FiscalDocumentLineInput } from '@app/contracts';
+import type {
+  CreateFiscalDocumentInput,
+  FiscalDocumentLineInput,
+  InvoiceIssuerOption,
+} from '@app/contracts';
 import {
   assertDocumentStatusTransition,
   calculateFiscalDocument,
@@ -145,12 +149,45 @@ export class FiscalDocumentsService {
     return documents.map(toView);
   }
 
+  async creationOptions(
+    principal: FiscalDocumentsPrincipal,
+  ): Promise<readonly InvoiceIssuerOption[]> {
+    const accessibleIds = await this.listAccessibleIssuerIds(principal);
+    if (accessibleIds?.length === 0) return [];
+    const issuers = await this.dataSource.getRepository(IssuerEntity).find({
+      where: {
+        organizationId: principal.organizationId,
+        active: true,
+        ...(accessibleIds ? { id: In(accessibleIds) } : {}),
+      },
+      order: { legalName: 'ASC' },
+    });
+    if (issuers.length === 0) return [];
+    const series = await this.dataSource.getRepository(IssuerSeriesEntity).find({
+      where: { issuerId: In(issuers.map((issuer) => issuer.id)), active: true },
+      order: { series: 'ASC' },
+    });
+    return issuers.map((issuer) => ({
+      id: issuer.id,
+      legalName: issuer.legalName,
+      ruc: issuer.ruc,
+      series: series
+        .filter((entry) => entry.issuerId === issuer.id)
+        .map((entry) => ({
+          id: entry.id,
+          series: entry.series,
+          documentType: entry.documentType,
+        })),
+    }));
+  }
+
   async requestVoid(
     principal: FiscalDocumentsPrincipal,
     command: RequestFiscalDocumentVoidCommand,
   ): Promise<FiscalDocumentView> {
     const reason = normalizeVoidReason(command.reason);
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      await requireIssuingWorkspace(manager, principal.organizationId);
       const documentRepository = manager.getRepository(FiscalDocumentEntity);
       const document = await documentRepository.findOne({
         where: {
@@ -212,7 +249,19 @@ export class FiscalDocumentsService {
     idempotencyKey: string,
     prepared: PreparedCreation,
   ): Promise<FiscalDocumentView> {
+    await requireIssuingWorkspace(manager, principal.organizationId);
     const issuer = await this.loadAuthorizedIssuer(manager, principal, prepared.input.issuerId);
+    if (issuer.environment !== 'production' && prepared.input.customer.email) {
+      const verified = await manager.query<{ email: string }[]>(
+        'SELECT email FROM verified_email_recipients WHERE organization_id=$1 AND email=$2',
+        [principal.organizationId, prepared.input.customer.email.trim().toLowerCase()],
+      );
+      if (!verified.length)
+        throw new InvalidFiscalRequestError(
+          'SANDBOX_RECIPIENT_NOT_VERIFIED',
+          'En Sandbox solo puedes enviar al correo verificado de tu cuenta.',
+        );
+    }
     const existing = await manager.getRepository(IdempotencyRequestEntity).findOne({
       where: { organizationId: principal.organizationId, key: idempotencyKey },
     });
@@ -702,9 +751,7 @@ function buildSnapshots(
   const lines = calculated.lines.map((line, index) => buildLineSnapshot(input.lines[index]!, line));
   const totals = totalsRecord(calculated);
   const fiscalContent = {
-    ...(parseEnvironment(process.env).SUNAT_PROVIDER_MODE === 'beta'
-      ? { environment: 'beta' }
-      : {}),
+    environment: issuer.environment === 'production' ? 'production' : 'beta',
     currency: input.currency,
     customer,
     documentType: input.documentType,
@@ -871,6 +918,10 @@ function normalizeListPagination(query: ListFiscalDocumentsQuery): {
   return { limit, offset };
 }
 
+function snapshotText(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
 function toView(document: FiscalDocumentEntity): FiscalDocumentView {
   return Object.freeze({
     currency: document.currency,
@@ -885,6 +936,21 @@ function toView(document: FiscalDocumentEntity): FiscalDocumentView {
     snapshotSha256: document.snapshotSha256,
     status: document.status,
     totals: Object.freeze({ ...document.totals }),
+    customer: {
+      legalName: snapshotText(document.customerSnapshot.legalName),
+      identityNumber: snapshotText(document.customerSnapshot.identityNumber),
+      ...(typeof document.customerSnapshot.email === 'string'
+        ? { email: document.customerSnapshot.email }
+        : {}),
+    },
+    lines: (Array.isArray(document.fiscalSnapshot.lines) ? document.fiscalSnapshot.lines : [])
+      .filter((line): line is Record<string, unknown> => typeof line === 'object' && line !== null)
+      .map((line) => ({
+        description: snapshotText(line.description, ''),
+        quantity: snapshotText(line.quantity, '0'),
+        unitValue: snapshotText(line.unitValue, '0'),
+        payableAmount: snapshotText(line.payableAmount, '0'),
+      })),
   });
 }
 

@@ -12,7 +12,7 @@ const SOAP = 'http://schemas.xmlsoap.org/soap/envelope/';
 const MAX_BYTES = 2 * 1024 * 1024;
 const ruc = z
   .string()
-  .regex(/^20\d{9}$/u)
+  .regex(/^(10|15|17|20)\d{9}$/u)
   .refine((value) => {
     const weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
     const check =
@@ -131,14 +131,14 @@ function signBetaInvoice(xml, privateKey, certificate) {
 }
 
 function packageInvoice(fileBase, xml) {
-  if (!/^20\d{9}-01-F[A-Z0-9]{3}-[1-9]\d{0,7}$/u.test(fileBase))
+  if (!/^(10|15|17|20)\d{9}-(01|03|07|08)-[FB][A-Z0-9]{3}-[1-9]\d{0,7}$/u.test(fileBase))
     throw new Error('Nombre de comprobante inválido');
   return Buffer.from(zipSync({ [`${fileBase}.xml`]: Buffer.from(xml) }));
 }
 
 function betaEnvelope(issuerRuc, fileBase, zip) {
   ruc.parse(issuerRuc);
-  if (!fileBase.startsWith(`${issuerRuc}-01-`)) throw new Error('RUC y archivo no coinciden');
+  if (!fileBase.startsWith(`${issuerRuc}-`)) throw new Error('RUC y archivo no coinciden');
   return `<?xml version="1.0" encoding="UTF-8"?><soap:Envelope xmlns:soap="${SOAP}" xmlns:ser="http://service.sunat.gob.pe" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><soap:Header><wsse:Security><wsse:UsernameToken><wsse:Username>${issuerRuc}MODDATOS</wsse:Username><wsse:Password>MODDATOS</wsse:Password></wsse:UsernameToken></wsse:Security></soap:Header><soap:Body><ser:sendBill><fileName>${xmlEscape(fileBase)}.zip</fileName><contentFile>${zip.toString('base64')}</contentFile></ser:sendBill></soap:Body></soap:Envelope>`;
 }
 
@@ -196,13 +196,15 @@ function parseBetaResponse(xml, documentId, fileBase) {
   };
 }
 
-async function sendToBeta(envelope) {
+async function sendToBeta(envelope, operation = 'sendBill') {
+  if (!['sendBill', 'sendSummary', 'getStatus'].includes(operation))
+    throw new Error('Operación inválida');
   // Fixed endpoint and no redirects: this pilot cannot be switched to production.
   const response = await fetch(BETA_URL, {
     method: 'POST',
     redirect: 'error',
     signal: AbortSignal.timeout(30000),
-    headers: { 'content-type': 'text/xml; charset=utf-8', SOAPAction: 'urn:sendBill' },
+    headers: { 'content-type': 'text/xml; charset=utf-8', SOAPAction: `urn:${operation}` },
     body: envelope,
   });
   const chunks = [];
@@ -228,3 +230,39 @@ module.exports = {
   parseBetaResponse,
   sendToBeta,
 };
+
+// Asynchronous beta operations, using the same fixed SUNAT endpoint.
+function betaOperationEnvelope(issuerRuc, operation, contents) {
+  ruc.parse(issuerRuc);
+  if (!['sendSummary', 'getStatus'].includes(operation)) throw new Error('Operación beta inválida');
+  return `<?xml version="1.0" encoding="UTF-8"?><soap:Envelope xmlns:soap="${SOAP}" xmlns:ser="http://service.sunat.gob.pe" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"><soap:Header><wsse:Security><wsse:UsernameToken><wsse:Username>${issuerRuc}MODDATOS</wsse:Username><wsse:Password>MODDATOS</wsse:Password></wsse:UsernameToken></wsse:Security></soap:Header><soap:Body><ser:${operation}>${contents}</ser:${operation}></soap:Body></soap:Envelope>`;
+}
+function parseBetaTicket(xml) {
+  const doc = parseXml(xml);
+  if (doc.documentElement.namespaceURI !== SOAP) throw new Error('Respuesta no SOAP');
+  const tickets = doc.getElementsByTagNameNS('*', 'ticket');
+  const ticket = tickets[0]?.textContent?.trim();
+  if (tickets.length !== 1 || !ticket || !/^[A-Za-z0-9-]{1,100}$/.test(ticket))
+    throw new Error('Ticket no confirmado');
+  return ticket;
+}
+function parseBetaStatus(xml, documentId, fileBase) {
+  const doc = parseXml(xml);
+  if (doc.documentElement.namespaceURI !== SOAP) throw new Error('Respuesta no SOAP');
+  const codes = doc.getElementsByTagNameNS('*', 'statusCode');
+  if (codes.length !== 1) throw new Error('Estado no confirmado');
+  const code = codes[0].textContent.trim();
+  if (code === '98') return { status: 'pending' };
+  const contents = doc.getElementsByTagNameNS('*', 'content');
+  if (contents.length !== 1) throw new Error('CDR no confirmada');
+  const result = parseBetaResponse(
+    `<soap:Envelope xmlns:soap="${SOAP}"><soap:Body><applicationResponse>${contents[0].textContent.trim()}</applicationResponse></soap:Body></soap:Envelope>`,
+    documentId,
+    fileBase,
+  );
+  return result;
+}
+module.exports.betaOperationEnvelope = betaOperationEnvelope;
+module.exports.parseBetaTicket = parseBetaTicket;
+module.exports.parseBetaStatus = parseBetaStatus;
+module.exports.xmlEscape = xmlEscape;

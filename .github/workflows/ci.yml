@@ -31,6 +31,9 @@ jobs:
       - run: pnpm test:sunat-beta
       - run: pnpm test:legacy-migration
       - run: pnpm build
+      - run: pnpm build:web
+      - run: pnpm test:web
+      - run: pnpm --filter @facture/web format:check
       - run: pnpm audit --prod
       - run: pnpm audit --dev
       - run: pnpm audit:no-secrets

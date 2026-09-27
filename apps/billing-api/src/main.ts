@@ -17,6 +17,7 @@ async function bootstrap(): Promise<void> {
     );
   }
   app.use(helmet());
+  app.useBodyParser('json', { limit: '3mb' });
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -33,7 +34,7 @@ async function bootstrap(): Promise<void> {
       .setTitle('Facture App Billing API')
       .setDescription(
         environment.SUNAT_PROVIDER_MODE === 'beta'
-          ? 'SUNAT BETA: sin validez fiscal. Factura PEN, una línea gravada al 18%, cantidad 1, sin descuentos, RUC autorizado. Correo de prueba capturado en Mailpit.'
+          ? 'Facture Sandbox: SUNAT beta, sin validez fiscal. Datos y credenciales aislados por empresa y ambiente.'
           : 'API de facturación',
       )
       .setVersion('1.0')

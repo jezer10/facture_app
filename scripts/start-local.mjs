@@ -35,10 +35,7 @@ function run(command, args, env = process.env) {
 }
 
 async function main() {
-  const beta = process.argv.includes('--beta');
-  const betaRuc = process.env.SUNAT_BETA_ISSUER_RUC;
-  if (beta && !/^20\d{9}$/u.test(betaRuc ?? ''))
-    throw new Error('Set SUNAT_BETA_ISSUER_RUC to the issuer RUC for beta.');
+  const beta = true;
   await run('sh', ['scripts/generate-development-secrets.sh']);
   for (const [name, bytes] of [
     ['minio_access_key', 16],
@@ -132,22 +129,49 @@ async function main() {
     BILLING_API_KEY_REPLAY_KEY_FILE: secret('api_key_replay_key'),
     SUNAT_INTERNAL_SERVICE_SECRET_FILE: secret('sunat_internal_secret'),
     WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: secret('webhook_internal_secret'),
-    SUNAT_PROVIDER_MODE: beta ? 'beta' : 'mock',
+    SUNAT_PROVIDER_MODE: 'beta',
+    BILLING_MASTER_KEY_FILE: secret('sunat_master_key'),
     BILLING_EMAIL_MODE: beta ? 'mailpit' : 'disabled',
     ...(beta
       ? {
-          SUNAT_BETA_ISSUER_RUC: betaRuc,
           SUNAT_BETA_KEY_FILE: secret('beta_private.key'),
           SUNAT_BETA_CERT_FILE: secret('beta_certificate.pem'),
         }
       : {}),
-    SUNAT_MOCK_ALLOW_ANY_ISSUER: 'true',
     R2_ENDPOINT: 'http://127.0.0.1:59000',
     R2_REGION: 'us-east-1',
     R2_BUCKET: 'billing-private',
     R2_ACCESS_KEY_ID_FILE: secret('minio_access_key'),
     R2_SECRET_ACCESS_KEY_FILE: secret('minio_secret_key'),
   });
+  const identityConfig = secret('identity-config.json');
+  if (existsSync(identityConfig)) {
+    const identity = JSON.parse(readFileSync(identityConfig, 'utf8'));
+    for (const key of [
+      'BILLING_COGNITO_POOL_ID',
+      'BILLING_COGNITO_CLIENT_ID',
+      'BILLING_COGNITO_DOMAIN',
+      'BILLING_COGNITO_CLIENT_SECRET_FILE',
+      'BILLING_WEB_ORIGIN',
+    ]) {
+      if (typeof identity[key] !== 'string')
+        throw new Error('Invalid local identity configuration');
+      env[key] = identity[key];
+    }
+    const centralKeys = [
+      'BILLING_IDENTITY_ISSUER',
+      'BILLING_IDENTITY_CLIENT_ID',
+      'BILLING_IDENTITY_CLIENT_SECRET_FILE',
+      'BILLING_IDENTITY_DATA_KEY_FILE',
+    ];
+    if (centralKeys.some((key) => identity[key] !== undefined)) {
+      for (const key of centralKeys) {
+        if (typeof identity[key] !== 'string' || !identity[key])
+          throw new Error('Incomplete local central identity configuration');
+        env[key] = identity[key];
+      }
+    }
+  }
   const storage = new S3Client({
     endpoint: env.R2_ENDPOINT,
     region: env.R2_REGION,

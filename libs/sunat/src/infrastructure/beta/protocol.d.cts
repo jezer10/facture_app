@@ -19,7 +19,7 @@ export function signBetaInvoice(xml: string, privateKey: Buffer, certificate: Bu
 export function verifySignature(xml: string, certificate: Buffer): boolean;
 export function packageInvoice(fileBase: string, xml: string): Buffer;
 export function betaEnvelope(issuerRuc: string, fileBase: string, zip: Buffer): string;
-export function sendToBeta(envelope: string): Promise<{ httpStatus: number; body: string }>;
+export function sendToBeta(envelope: string, operation?: 'sendBill'|'sendSummary'|'getStatus'): Promise<{ httpStatus: number; body: string }>;
 export function parseBetaResponse(
   xml: string,
   documentId: string,
@@ -32,3 +32,8 @@ export function parseBetaResponse(
   cdrZip?: Buffer;
   cdrXml?: string;
 };
+
+export function betaOperationEnvelope(ruc:string,operation:'sendSummary'|'getStatus',contents:string):string;
+export function parseBetaTicket(xml:string):string;
+export function parseBetaStatus(xml:string,documentId:string,fileBase:string): {status:'pending'} | ReturnType<typeof parseBetaResponse>;
+export function xmlEscape(value:string):string;

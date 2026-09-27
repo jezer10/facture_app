@@ -1,27 +1,6 @@
 import { parseEnvironment, type BillingEnvironment } from '@app/platform';
 
-export function sunatMockIssuerIds(): string[] {
-  return (process.env.SUNAT_MOCK_ISSUER_IDS ?? '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-export function sunatMockAllowAnyIssuer(): boolean {
-  const value = process.env.SUNAT_MOCK_ALLOW_ANY_ISSUER?.trim().toLowerCase();
-  if (value === undefined || value === 'false') {
-    return false;
-  }
-  if (value !== 'true') {
-    throw new Error('SUNAT_MOCK_ALLOW_ANY_ISSUER debe ser true o false.');
-  }
-  if (environment().NODE_ENV === 'production') {
-    throw new Error('SUNAT_MOCK_ALLOW_ANY_ISSUER está prohibido en producción.');
-  }
-  return true;
-}
-
-export function sunatProviderMode(): 'mock' | 'beta' | 'production' {
+export function sunatProviderMode(): 'beta' | 'production' {
   return environment().SUNAT_PROVIDER_MODE;
 }
 

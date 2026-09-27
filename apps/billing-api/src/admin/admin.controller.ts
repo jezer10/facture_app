@@ -1,5 +1,6 @@
 import {
   Body,
+  ForbiddenException,
   Controller,
   Delete,
   Headers,
@@ -64,7 +65,11 @@ export class AdminController {
     @Body() body: CreateIssuerDto,
     @CurrentPrincipal() principal: BillingPrincipal,
   ): Promise<IssuerEntity> {
-    return this.administration.createIssuer(requireOrganization(principal), body, principal);
+    void body;
+    void principal;
+    throw new ForbiddenException(
+      'Registra la empresa y solicita su verificación en /company-registrations antes de habilitar un emisor.',
+    );
   }
 
   @Post('issuers/:issuerId/series')

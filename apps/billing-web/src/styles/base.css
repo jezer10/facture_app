@@ -1,0 +1,63 @@
+@layer base {
+  body {
+    @apply m-0 bg-canvas font-sans text-sm text-ink antialiased;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply outline-offset-4;
+  }
+  :focus-visible {
+    @apply outline-2 outline-brand;
+  }
+  button:not(:disabled),
+  select {
+    @apply cursor-pointer;
+  }
+  button:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+  h1 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+  h1:focus {
+    outline: none;
+  }
+  h2 {
+    @apply text-lg font-semibold tracking-tight;
+  }
+  h3 {
+    @apply font-semibold;
+  }
+  p {
+    @apply leading-relaxed;
+  }
+  ::selection {
+    @apply bg-brand text-white;
+  }
+  input,
+  textarea {
+    caret-color: var(--color-brand);
+  }
+  * {
+    scrollbar-color: #b3c2b7 transparent;
+    scrollbar-width: thin;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}

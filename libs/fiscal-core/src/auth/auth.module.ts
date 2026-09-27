@@ -8,6 +8,11 @@ import { ApiKeyEntity, OrganizationMemberEntity, ServiceAccountEntity } from '..
 import { ApiKeyService, API_KEY_PEPPER } from './api-key.service';
 import { AuthenticationGuard } from './authentication.guard';
 
+import { BrowserSessionService } from './browser-session.service';
+import { BrowserAuthController } from './browser-auth.controller';
+import { NativeAuthService } from './native-auth.service';
+import { NativeAuthController } from './native-auth.controller';
+
 function loadSecret(path: string | undefined, purpose: string, expectedBytes?: number): Buffer {
   const environment = parseEnvironment(process.env);
   if (path) {
@@ -41,7 +46,10 @@ function loadSecret(path: string | undefined, purpose: string, expectedBytes?: n
       },
     }),
   ],
+  controllers: [BrowserAuthController, NativeAuthController],
   providers: [
+    BrowserSessionService,
+    NativeAuthService,
     {
       provide: API_KEY_PEPPER,
       useFactory: () => {
@@ -53,6 +61,6 @@ function loadSecret(path: string | undefined, purpose: string, expectedBytes?: n
     AuthenticationGuard,
     { provide: APP_GUARD, useExisting: AuthenticationGuard },
   ],
-  exports: [API_KEY_PEPPER, ApiKeyService, JwtModule],
+  exports: [API_KEY_PEPPER, ApiKeyService, JwtModule, BrowserSessionService],
 })
 export class AuthModule {}

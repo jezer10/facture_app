@@ -8,20 +8,13 @@ import { SunatModule } from '@app/sunat';
 
 import { SunatHealthController } from './health/sunat-health.controller';
 import { SunatHealthService } from './health/sunat-health.service';
-import { sunatMockAllowAnyIssuer, sunatMockIssuerIds, sunatProviderMode } from './runtime-config';
+import { sunatProviderMode } from './runtime-config';
 import { SqsSunatEventPublisher } from './transport/sqs-sunat-event-publisher';
 import { SunatCommandProcessor } from './transport/sunat-command.processor';
 import { SunatResultOutboxRelay } from './transport/sunat-result-outbox-relay';
 
 const sunatDomainModule =
-  sunatProviderMode() === 'mock'
-    ? SunatModule.forDurableMock({
-        allowAnyIssuer: sunatMockAllowAnyIssuer(),
-        issuerIds: sunatMockIssuerIds(),
-      })
-    : sunatProviderMode() === 'beta'
-      ? SunatModule.forBeta()
-      : SunatModule.forProduction();
+  sunatProviderMode() === 'beta' ? SunatModule.forBeta() : SunatModule.forProduction();
 
 @Module({
   imports: [

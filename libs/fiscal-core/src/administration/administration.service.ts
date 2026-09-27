@@ -1,3 +1,4 @@
+import { requireWorkspace } from '../companies/workspace-policy';
 import {
   BadRequestException,
   ConflictException,
@@ -121,6 +122,9 @@ export class AdministrationService {
     }
     try {
       return await this.dataSource.transaction(async (manager) => {
+        const workspace = await requireWorkspace(manager, organizationId);
+        if (workspace.environment === 'production')
+          throw new ForbiddenException('Los emisores productivos se crean al validar la empresa.');
         const issuers = manager.getRepository(IssuerEntity);
         const issuer = await issuers.save(
           issuers.create({

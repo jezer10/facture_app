@@ -1,6 +1,12 @@
 export const SUNAT_ARTIFACT_STORE_PORT = Symbol('SUNAT_ARTIFACT_STORE_PORT');
 
-export type SunatArtifactKind = 'xml' | 'signed-xml' | 'zip' | 'cdr' | 'canonical-json';
+export type SunatArtifactKind =
+  | 'xml'
+  | 'signed-xml'
+  | 'zip'
+  | 'cdr'
+  | 'void-cdr'
+  | 'canonical-json';
 
 export interface StoredSunatArtifact {
   kind: SunatArtifactKind;

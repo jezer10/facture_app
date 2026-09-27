@@ -15,6 +15,7 @@ export type FiscalDocumentsErrorCode =
   | 'INVALID_LINE_DISCOUNT'
   | 'INVALID_FREE_LINE'
   | 'INVALID_TAX_RATE'
+  | 'SANDBOX_RECIPIENT_NOT_VERIFIED'
   | 'CORRELATIVE_EXHAUSTED';
 
 export class FiscalDocumentsError extends Error {
@@ -107,7 +108,8 @@ export class InvalidFiscalRequestError extends FiscalDocumentsError {
       | 'INVALID_VOID_REASON'
       | 'INVALID_LINE_DISCOUNT'
       | 'INVALID_FREE_LINE'
-      | 'INVALID_TAX_RATE',
+      | 'INVALID_TAX_RATE'
+      | 'SANDBOX_RECIPIENT_NOT_VERIFIED',
     message: string,
   ) {
     super(code, message);

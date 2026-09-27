@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import type { CreateFiscalDocumentInput } from '@app/contracts';
 import { createImmutableSnapshot } from '@app/fiscal-domain';
 import { ValidationPipe } from '@nestjs/common';
+import { In } from 'typeorm';
 import type { DataSource, EntityManager } from 'typeorm';
 
 import {
@@ -20,6 +21,7 @@ import {
   IssuerEntity,
   IssuerSeriesEntity,
   OutboxEventEntity,
+  OrganizationEntity,
   ServiceAccountIssuerGrantEntity,
 } from '../database/entities';
 import {
@@ -395,6 +397,89 @@ describe('FiscalDocumentsService tenant-safe queries', () => {
   });
 });
 
+describe('FiscalDocumentsService creation options', () => {
+  it('returns no issuers or series without an issuer grant', async () => {
+    const harness = createHarness();
+    harness.grant.find.mockResolvedValue([]);
+    expect(await harness.service.creationOptions(PRINCIPAL)).toEqual([]);
+    expect(harness.issuer.find).not.toHaveBeenCalled();
+    expect(harness.series.find).not.toHaveBeenCalled();
+  });
+
+  it('scopes options to the organization and granted issuers without exposing extra fields', async () => {
+    const harness = createHarness();
+    harness.grant.find.mockResolvedValue([
+      entity(ServiceAccountIssuerGrantEntity, { issuerId: ISSUER_ID }),
+    ]);
+    harness.issuer.find.mockResolvedValue([activeIssuer()]);
+    harness.series.find.mockResolvedValue([
+      series(),
+      series({ issuerId: 'other-issuer', id: 'other-series' }),
+    ]);
+    expect(await harness.service.creationOptions(PRINCIPAL)).toEqual([
+      {
+        id: ISSUER_ID,
+        legalName: 'ACME SAC',
+        ruc: '20123456789',
+        series: [{ id: SERIES_ID, series: 'F001', documentType: '01' }],
+      },
+    ]);
+    expect(harness.grant.find).toHaveBeenCalledWith({
+      where: {
+        organizationId: PRINCIPAL.organizationId,
+        serviceAccountId: PRINCIPAL.serviceAccountId,
+      },
+    });
+    expect(harness.issuer.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          organizationId: PRINCIPAL.organizationId,
+          active: true,
+          id: In([ISSUER_ID]),
+        },
+      }),
+    );
+  });
+
+  it('scopes human administrators to their organization', async () => {
+    const harness = createHarness();
+    await harness.service.creationOptions(HUMAN_PRINCIPAL);
+    expect(harness.issuer.find).toHaveBeenCalledWith({
+      where: { organizationId: PRINCIPAL.organizationId, active: true },
+      order: { legalName: 'ASC' },
+    });
+    expect(harness.grant.find).not.toHaveBeenCalled();
+  });
+
+  it('exposes only public customer and line fields from snapshots', async () => {
+    const harness = createHarness();
+    const document = fiscalDocument({
+      customerSnapshot: {
+        legalName: 'Cliente SAC',
+        identityNumber: '20123456789',
+        privateField: 'hidden',
+      },
+      fiscalSnapshot: {
+        lines: [
+          {
+            description: 'Servicio',
+            quantity: '1',
+            unitValue: '100',
+            payableAmount: '118',
+            privateField: 'hidden',
+          },
+        ],
+      },
+    });
+    harness.document.findOne.mockResolvedValue(document);
+    const view = await harness.service.get(PRINCIPAL, document.id);
+    expect(view.customer).toEqual({ legalName: 'Cliente SAC', identityNumber: '20123456789' });
+    expect(view.lines).toEqual([
+      { description: 'Servicio', quantity: '1', unitValue: '100', payableAmount: '118' },
+    ]);
+  });
+});
+
 describe('FiscalDocumentsService.requestVoid', () => {
   it('locks an accepted document and records its outbox transition atomically', async () => {
     const harness = createHarness();
@@ -491,6 +576,14 @@ function createHarness(): TestHarness {
   const outbox = repositoryDouble(OutboxEventEntity);
   const seriesRepository = repositoryDouble(IssuerSeriesEntity);
   const repositories = new Map<object, unknown>([
+    [
+      OrganizationEntity,
+      {
+        findOneBy: jest
+          .fn()
+          .mockResolvedValue({ id: PRINCIPAL.organizationId, environment: 'sandbox' }),
+      },
+    ],
     [DocumentStateHistoryEntity, history],
     [FiscalDocumentEntity, document],
     [FiscalDocumentLineEntity, line],
@@ -507,7 +600,10 @@ function createHarness(): TestHarness {
     }
     return repository;
   });
-  const manager = { getRepository } as unknown as EntityManager;
+  const manager = {
+    getRepository,
+    query: jest.fn().mockResolvedValue([{ email: 'buyer@example.test' }]),
+  } as unknown as EntityManager;
   const transaction = jest.fn(
     async <T>(
       _isolation: 'SERIALIZABLE',

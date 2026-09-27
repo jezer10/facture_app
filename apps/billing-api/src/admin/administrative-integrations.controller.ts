@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Put,
+} from '@nestjs/common';
 import { AdministrationService, CurrentPrincipal, RequireScopes } from '@app/fiscal-core';
 import type { BillingPrincipal } from '@app/fiscal-core';
 import { ConfigureWebhookSubscriptionDto, ProvisionSunatCredentialDto } from './admin.dto';
@@ -25,6 +33,10 @@ export class AdministrativeIntegrationsController {
   ): Promise<SunatCredentialStatus> {
     const organizationId = requireOrganization(principal);
     const issuer = await this.administration.getIssuerForPrincipal(principal, issuerId);
+    if (issuer.environment !== 'production' || body.environment !== 'production')
+      throw new BadRequestException(
+        'Sandbox usa credenciales públicas de SUNAT beta; configura tus credenciales solo en Producción.',
+      );
     return this.internalServices.provisionSunatCredential(
       organizationId,
       issuer.id,

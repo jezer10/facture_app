@@ -1,26 +1,31 @@
+import type { DataSource } from 'typeorm';
+import { zipSync } from 'fflate';
+import { buildVoidXml } from './void-ubl';
 import { createHash, X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import Decimal from 'decimal.js';
+import { SandboxUblBuilder } from './sandbox-ubl-builder';
 import type { ObjectStoragePort } from '@app/platform';
 import { readSecretFile } from '@app/platform';
 import {
-  buildBetaInvoice,
   signBetaInvoice,
   verifySignature,
   packageInvoice,
   betaEnvelope,
   sendToBeta,
   parseBetaResponse,
+  betaOperationEnvelope,
+  parseBetaTicket,
+  parseBetaStatus,
+  xmlEscape,
 } from './protocol.cjs';
 import {
   SunatSubmissionAmbiguousError,
   SunatUnsafeConfigurationError,
-  SunatValidationError,
 } from '../../domain/errors/sunat.error';
 import {
-  toFiscalDocumentIdentity,
-  type FiscalDocumentSnapshot,
   type FiscalDocumentIdentity,
+  type FiscalDocumentSnapshot,
+  toFiscalDocumentIdentity,
 } from '../../domain/models/fiscal-document';
 import type {
   IssuerCredentialHandle,
@@ -28,87 +33,21 @@ import type {
   UnsignedUblDocument,
   SunatSubmissionOutcome,
   SunatReconciliationOutcome,
+  SunatVoidOutcome,
 } from '../../domain/models/sunat-outcome';
-import type { UblBuilderPort } from '../../domain/ports/ubl-builder.port';
 import type { XmlSignerPort } from '../../domain/ports/xml-signer.port';
 import type { IssuerCredentialPort } from '../../domain/ports/issuer-credential.port';
 import type { SunatProviderPort } from '../../domain/ports/sunat-provider.port';
 import type { StoredSunatArtifact } from '../../domain/ports/sunat-artifact-store.port';
 
 export function assertBetaOnly(): void {
-  if (process.env.NODE_ENV === 'production' || process.env.SUNAT_PROVIDER_MODE !== 'beta') {
-    throw new SunatUnsafeConfigurationError(
-      'Los adaptadores beta requieren desarrollo y SUNAT_PROVIDER_MODE=beta.',
-    );
+  if (process.env.SUNAT_PROVIDER_MODE !== undefined && process.env.SUNAT_PROVIDER_MODE !== 'beta') {
+    throw new SunatUnsafeConfigurationError('Sandbox requiere SUNAT_PROVIDER_MODE=beta.');
   }
 }
 const hash = (body: string | Buffer): string => createHash('sha256').update(body).digest('hex');
 
-export class BetaUblBuilder implements UblBuilderPort {
-  constructor(private readonly issuerRuc: string) {
-    assertBetaOnly();
-  }
-  build(snapshot: FiscalDocumentSnapshot): UnsignedUblDocument {
-    const line = snapshot.lines[0];
-    if (
-      snapshot.issuer.documentNumber !== this.issuerRuc ||
-      snapshot.documentType !== '01' ||
-      snapshot.currencyCode !== 'PEN' ||
-      snapshot.lines.length !== 1 ||
-      !line ||
-      snapshot.issuer.documentType !== '6' ||
-      snapshot.recipient.documentType !== '6' ||
-      !new Decimal(line.quantity).equals(1) ||
-      line.tax.schemeId !== '1000' ||
-      !new Decimal(line.unitPrice).equals(line.lineExtensionAmount)
-    ) {
-      throw new SunatValidationError(
-        'BETA_UNSUPPORTED_INVOICE',
-        'Beta admite sólo una factura PEN del RUC configurado, una línea gravada, cantidad 1, sin descuentos y cliente con RUC.',
-      );
-    }
-    const tax = new Decimal(line.lineExtensionAmount).mul('0.18').toDecimalPlaces(2);
-    if (
-      !tax.equals(line.tax.taxAmount) ||
-      !tax.equals(snapshot.taxTotal) ||
-      !new Decimal(line.lineExtensionAmount).equals(line.tax.taxableAmount) ||
-      !new Decimal(line.lineExtensionAmount).equals(snapshot.lineExtensionTotal) ||
-      !new Decimal(snapshot.lineExtensionTotal).plus(tax).equals(snapshot.payableTotal)
-    ) {
-      throw new SunatValidationError(
-        'BETA_TOTAL_MISMATCH',
-        'Los importes no coinciden con la factura beta gravada al 18%.',
-      );
-    }
-    let built;
-    try {
-      built = buildBetaInvoice({
-        environment: 'beta',
-        issuer: { ruc: snapshot.issuer.documentNumber, legalName: snapshot.issuer.legalName },
-        customer: {
-          ruc: snapshot.recipient.documentNumber,
-          legalName: snapshot.recipient.legalName,
-        },
-        series: snapshot.series,
-        number: snapshot.number,
-        issueDate: snapshot.issueDate,
-        description: line.description,
-        netAmount: new Decimal(line.unitPrice).toFixed(2),
-      });
-    } catch {
-      throw new SunatValidationError(
-        'BETA_INVALID_INPUT',
-        'Datos fuera del alcance beta: RUC válido, serie F, valor neto máximo S/500.',
-      );
-    }
-    // Keep the unit selected in the API in the XML sent to SUNAT.
-    const xml = built.xml.replace(
-      'unitCode="ZZ"',
-      `unitCode="${line.unitCode.replace(/[^A-Z0-9]/gu, '')}"`,
-    );
-    return { identity: toFiscalDocumentIdentity(snapshot), xml, sha256: hash(xml) };
-  }
-}
+export class BetaUblBuilder extends SandboxUblBuilder {}
 
 export class BetaSigner implements XmlSignerPort {
   private readonly key: Buffer;
@@ -170,6 +109,7 @@ export class BetaSunatProvider implements SunatProviderPort {
   constructor(
     private readonly storage: ObjectStoragePort,
     private readonly signer: BetaSigner,
+    private readonly database?: DataSource,
   ) {
     assertBetaOnly();
   }
@@ -249,9 +189,11 @@ export class BetaSunatProvider implements SunatProviderPort {
   }
   async reconcileDocument(
     identity: FiscalDocumentIdentity,
-    _tracking: string | null,
+    tracking: string | null,
     credentials: IssuerCredentialHandle,
   ): Promise<SunatReconciliationOutcome> {
+    if (tracking?.startsWith('void:'))
+      return this.reconcileVoid(identity, credentials, tracking.slice(5));
     return (
       (await this.receipt(this.prefix(identity, credentials))) ?? {
         status: 'pending',
@@ -263,11 +205,144 @@ export class BetaSunatProvider implements SunatProviderPort {
     identity: FiscalDocumentIdentity,
     credentials: IssuerCredentialHandle,
   ): Promise<readonly StoredSunatArtifact[]> {
-    const outcome = await this.receipt(this.prefix(identity, credentials));
-    return outcome && outcome.status !== 'pending' ? (outcome.artifacts ?? []) : [];
+    const prefix = this.prefix(identity, credentials);
+    const outcome = await this.receipt(prefix);
+    const voidOutcome = await this.readJson<SunatVoidOutcome>(`${prefix}/void-receipt.json`);
+    return [
+      ...(outcome && outcome.status !== 'pending' ? (outcome.artifacts ?? []) : []),
+      ...(voidOutcome?.status === 'voided' ? (voidOutcome.artifacts ?? []) : []),
+    ];
   }
-  submitVoidCommunication(): Promise<never> {
-    return Promise.reject(new SunatUnsafeConfigurationError('Bajas beta aún no implementadas.'));
+  async submitVoidCommunication(
+    identity: FiscalDocumentIdentity,
+    reason: string,
+    credentials: IssuerCredentialHandle,
+    context?: { organizationId: string; snapshot: FiscalDocumentSnapshot },
+  ): Promise<SunatVoidOutcome> {
+    if (!context || context.snapshot.environment !== 'beta' || !this.database)
+      throw new SunatUnsafeConfigurationError('Falta el contexto persistente de la baja.');
+    const prefix = this.prefix(identity, credentials);
+    const prior = await this.readJson<{ ticket: string }>(`${prefix}/void-ticket.json`);
+    if (prior) return { status: 'pending', providerTrackingId: `void:${prior.ticket}` };
+    if (await this.readJson(`${prefix}/void-intent.json`))
+      throw new SunatSubmissionAmbiguousError('void:unconfirmed');
+    const date = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Lima',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const [sequence] = await this.database.query<{ number: number }[]>(
+      `INSERT INTO beta_summary_sequences(issuer_id,issue_date,number) VALUES($1,$2,1) ON CONFLICT(issuer_id,issue_date) DO UPDATE SET number=beta_summary_sequences.number+1 RETURNING number`,
+      [credentials.issuerId, date],
+    );
+    if (!sequence)
+      throw new SunatUnsafeConfigurationError('No se pudo reservar el correlativo de baja.');
+    const built = buildVoidXml(context.snapshot, reason, date, String(sequence.number));
+    const signed = await this.signer.sign(
+      {
+        identity: toFiscalDocumentIdentity(context.snapshot),
+        xml: built.xml,
+        sha256: hash(built.xml),
+      },
+      credentials,
+    );
+    const zip = Buffer.from(zipSync({ [`${built.file}.xml`]: Buffer.from(signed.xml) }));
+    await this.putJson(`${prefix}/void-intent.json`, {
+      id: built.id,
+      file: built.file,
+      organizationId: context.organizationId,
+    });
+    await this.putArtifact(`${prefix}/void`, 'xml', Buffer.from(signed.xml), 'application/xml');
+    try {
+      const response = await sendToBeta(
+        betaOperationEnvelope(
+          identity.issuerRuc,
+          'sendSummary',
+          `<fileName>${xmlEscape(built.file)}.zip</fileName><contentFile>${zip.toString('base64')}</contentFile>`,
+        ),
+        'sendSummary',
+      );
+      await this.putArtifact(
+        `${prefix}/void-response`,
+        'xml',
+        Buffer.from(response.body),
+        'application/xml',
+      );
+      const ticket = parseBetaTicket(response.body);
+      await this.putJson(`${prefix}/void-ticket.json`, { ticket });
+      return { status: 'pending', providerTrackingId: `void:${ticket}` };
+    } catch {
+      throw new SunatSubmissionAmbiguousError('void:unconfirmed');
+    }
+  }
+  private async reconcileVoid(
+    identity: FiscalDocumentIdentity,
+    credentials: IssuerCredentialHandle,
+    ticket: string,
+  ): Promise<SunatReconciliationOutcome> {
+    const prefix = this.prefix(identity, credentials);
+    const confirmed = await this.readJson<SunatVoidOutcome>(`${prefix}/void-receipt.json`);
+    if (confirmed) return confirmed;
+    const stored = await this.readJson<{ ticket: string }>(`${prefix}/void-ticket.json`);
+    const intent = await this.readJson<{ id: string; file: string; organizationId: string }>(
+      `${prefix}/void-intent.json`,
+    );
+    if (!stored || !intent) return { status: 'pending', providerTrackingId: `void:${ticket}` };
+    const response = await sendToBeta(
+      betaOperationEnvelope(
+        identity.issuerRuc,
+        'getStatus',
+        `<ticket>${xmlEscape(stored.ticket)}</ticket>`,
+      ),
+      'getStatus',
+    );
+    const parsed = parseBetaStatus(response.body, intent.id, intent.file);
+    if (parsed.status === 'pending')
+      return { status: 'pending', providerTrackingId: `void:${stored.ticket}` };
+    if (!parsed.cdrZip || parsed.status === 'soap_fault')
+      throw new SunatSubmissionAmbiguousError(`void:${stored.ticket}`);
+    const cdr = await this.putArtifact(
+      `sunat/${intent.organizationId}/${credentials.issuerId}/documents/${identity.documentId}`,
+      'void-cdr',
+      parsed.cdrZip,
+      'application/zip',
+    );
+    const outcome: SunatVoidOutcome =
+      parsed.status === 'accepted_beta'
+        ? { status: 'voided', providerTrackingId: `void:${stored.ticket}`, artifacts: [cdr] }
+        : {
+            status: 'rejected',
+            providerTrackingId: `void:${stored.ticket}`,
+            responseCode: parsed.responseCode,
+            description: parsed.description,
+            observations: [],
+            cdrReference: cdr.objectKey,
+            artifacts: [cdr],
+          };
+    await this.putJson(`${prefix}/void-receipt.json`, outcome);
+    return outcome;
+  }
+  private async readJson<T = unknown>(key: string): Promise<T | null> {
+    try {
+      return JSON.parse((await this.storage.get(key)).toString('utf8')) as T;
+    } catch (error) {
+      if (
+        (error as { name?: string }).name === 'NoSuchKey' ||
+        (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404
+      )
+        return null;
+      throw error;
+    }
+  }
+  private async putJson(key: string, value: unknown): Promise<void> {
+    const body = Buffer.from(JSON.stringify(value));
+    await this.storage.putImmutable({
+      key,
+      body,
+      sha256: hash(body),
+      contentType: 'application/json',
+    });
   }
   listReceivedDocuments(): Promise<never> {
     return Promise.reject(
@@ -279,12 +354,12 @@ export class BetaSunatProvider implements SunatProviderPort {
       ready: true,
       provider: 'sunat-beta',
       environment: 'beta' as const,
-      detail: 'SUNAT beta oficial. Sólo factura simple; no habilita producción.',
+      detail: 'SUNAT beta oficial: facturas, boletas y notas. Sin validez fiscal.',
     });
   }
   private async putArtifact(
     prefix: string,
-    kind: 'zip' | 'cdr' | 'xml',
+    kind: 'zip' | 'cdr' | 'xml' | 'void-cdr',
     body: Buffer,
     contentType: string,
   ): Promise<StoredSunatArtifact> {

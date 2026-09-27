@@ -174,7 +174,9 @@ services:
       SUNAT_DATABASE_PASSWORD_FILE: /run/secrets/sunat_db_password
       BILLING_MASTER_KEY_FILE: /run/secrets/master_key
       SUNAT_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/sunat_internal_secret
-      SUNAT_PROVIDER_MODE: production
+      SUNAT_PROVIDER_MODE: beta
+      SUNAT_BETA_KEY_FILE: /run/secrets/beta_private_key
+      SUNAT_BETA_CERT_FILE: /run/secrets/beta_certificate
       R2_ENDPOINT: ${R2_ENDPOINT:?Set R2_ENDPOINT}
       R2_REGION: ${R2_REGION:-auto}
       R2_BUCKET: ${R2_BUCKET:?Set R2_BUCKET}
@@ -187,6 +189,8 @@ services:
       - source: sunat_master_key
         target: master_key
       - sunat_internal_secret
+      - beta_private_key
+      - beta_certificate
       - source: r2_sunat_access_key_id
         target: r2_access_key_id
       - source: r2_sunat_secret_access_key
@@ -251,6 +255,8 @@ networks:
           gateway: ${BILLING_EGRESS_GATEWAY:-172.31.250.1}
 
 secrets:
+  beta_private_key: { file: '${SECRET_DIR:-./deploy/secrets/local}/beta_private.key' }
+  beta_certificate: { file: '${SECRET_DIR:-./deploy/secrets/local}/beta_certificate.pem' }
   postgres_admin_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/postgres_admin_password' }
   core_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/core_db_password' }
   sunat_db_password: { file: '${SECRET_DIR:-./deploy/secrets/local}/sunat_db_password' }

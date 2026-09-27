@@ -11,7 +11,11 @@ import {
   UseFilters,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type { AcceptedFiscalDocument, ArtifactReference } from '@app/contracts';
+import type {
+  AcceptedFiscalDocument,
+  ArtifactReference,
+  InvoiceIssuerOption,
+} from '@app/contracts';
 import {
   CurrentPrincipal,
   DocumentArtifactsService,
@@ -72,6 +76,15 @@ export class FiscalDocumentsController {
     @Req() request: Request,
   ): Promise<readonly FiscalDocumentView[]> {
     return this.documents.list(toDocumentsPrincipal(principal, request), query);
+  }
+
+  @Get('creation-options')
+  @RequireScopes('documents:read')
+  creationOptions(
+    @CurrentPrincipal() principal: BillingPrincipal,
+    @Req() request: Request,
+  ): Promise<readonly InvoiceIssuerOption[]> {
+    return this.documents.creationOptions(toDocumentsPrincipal(principal, request));
   }
 
   @Get(':documentId')

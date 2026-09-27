@@ -74,3 +74,41 @@ export interface AcceptedFiscalDocument {
   readonly status: PublicDocumentStatus;
   readonly statusUrl: string;
 }
+
+/** Public, tenant-scoped document read model. Never includes credentials. */
+export interface FiscalDocumentView {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly issuerId: string;
+  readonly documentType: FiscalDocumentType;
+  readonly series: string;
+  readonly number: string;
+  readonly issueDate: string;
+  readonly currency: 'PEN' | 'USD';
+  readonly status: PublicDocumentStatus;
+  readonly snapshotSha256: string;
+  readonly totals: Readonly<Record<string, string>>;
+  readonly referenceDocumentId: string | null;
+  readonly customer?: {
+    readonly legalName: string;
+    readonly identityNumber: string;
+    readonly email?: string;
+  };
+  readonly lines?: readonly {
+    readonly description: string;
+    readonly quantity: string;
+    readonly unitValue: string;
+    readonly payableAmount: string;
+  }[];
+}
+
+export interface InvoiceIssuerOption {
+  readonly id: string;
+  readonly legalName: string;
+  readonly ruc: string;
+  readonly series: readonly {
+    readonly id: string;
+    readonly series: string;
+    readonly documentType: FiscalDocumentType;
+  }[];
+}

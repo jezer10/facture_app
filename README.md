@@ -5,12 +5,11 @@ varios servicios internos. La API pública es asíncrona: registra el documento 
 correlativo en PostgreSQL, responde `202`, y procesa SUNAT, artefactos y webhooks a
 través de Amazon SQS.
 
-> **Estado fiscal:** el flujo distribuido funciona con simulador y con SUNAT beta
-> para facturas simples; incluye PDF y correo local. La emisión fiscal productiva
-> permanece bloqueada de forma intencional. La firma
-> XMLDSig y el transporte SOAP/ZIP/CDR deben validarse con certificados y fixtures
-> oficiales de SUNAT antes de habilitar producción; el health productivo falla
-> cerrado mientras eso no ocurra.
+> **Ambientes:** Facture ofrece Sandbox por empresa desde el envío de su solicitud,
+> conectado a SUNAT beta. Producción tiene datos y credenciales separados y requiere
+> empresa validada y conexión fiscal habilitada. La emisión productiva todavía está
+> bloqueada por el adaptador directo pendiente de implementación verificada.
+> Consulta [ambientes, cobertura y pendientes](docs/company-environments.md).
 
 ## Propiedad de la facturación
 
@@ -32,6 +31,10 @@ No migra credenciales SOL ni borra datos del backend anterior.
 
 ## Arquitectura
 
+La arquitectura objetivo para compartir identidad, empresas y accesos entre Facture,
+sndr y brst está documentada en [Identidad y empresas compartidas](docs/shared-platform-identity.md).
+Distingue el núcleo central y el backoffice propuestos de la implementación actual.
+
 - `billing-api`: autenticación JWT/API key y API `/api/v1`.
 - `billing-worker`: outbox/inbox, resultados SUNAT y PDF/QR.
 - `sunat-service`: UBL, firma, envíos, conciliación, CDR y recepción.
@@ -51,7 +54,7 @@ object keys inmutables.
 - Un bucket R2 privado y credenciales distintas de mínimo privilegio para API,
   worker y SUNAT.
 
-## Desarrollo completamente local (MinIO)
+## Desarrollo con infraestructura local y SUNAT beta
 
 Con Node.js 24, pnpm y Docker en ejecución:
 
@@ -63,7 +66,7 @@ pnpm dev:local
 El comando genera secretos privados sin sobrescribir los existentes, inicia
 PostgreSQL, LocalStack (SQS local), Mailpit y MinIO en Docker, crea el bucket privado, aplica las migraciones,
 instala Chromium para los PDF, compila y ejecuta los cuatro servicios con Node.js.
-SUNAT funciona en modo simulado; las bases de datos, colas y archivos son locales
+SUNAT se conecta al servicio oficial beta; las bases de datos, colas y archivos son locales
 sin recursos AWS. PostgreSQL y MinIO son persistentes; las colas del emulador son
 temporales. No requiere credenciales AWS/R2 ni realiza envíos fiscales reales.
 
@@ -83,10 +86,24 @@ servicios usan estas mismas credenciales. PostgreSQL conserva las tres bases
 sus contraseñas están en los archivos `*_db_password` del mismo directorio.
 Los servicios internos usan los puertos 3301, 3302 y 3303.
 
-En otra terminal, `pnpm smoke:mock` verifica la emisión simulada y los artefactos.
+Crea una clave desde Configuración en Sandbox y ejecuta `SANDBOX_API_KEY_FILE=/ruta/privada pnpm smoke:sandbox` para emitir una prueba real en beta.
 `Ctrl+C` detiene las aplicaciones; `pnpm local:stop` detiene los contenedores sin
 borrar los datos. Vuelve a ejecutar `pnpm dev:local` para arrancar y recompilar.
 La configuración local está en `compose.local.yaml` y `scripts/start-local.mjs`.
+
+## Panel web de facturación
+
+El panel Vue 3 + TypeScript + Tailwind está en [`apps/billing-web`](apps/billing-web/README.md).
+Con la API local iniciada, ejecuta en otra terminal:
+
+```sh
+pnpm dev:web
+```
+
+Abre http://127.0.0.1:5173 e inicia sesión con el acceso central Cognito. Incluye
+listado paginado, filtros por estado/emisor, búsqueda en la página, emisión,
+detalle, descargas, notas y solicitudes de baja en Sandbox. La sesión se gestiona en el servidor con una cookie HttpOnly.
+Consulta la guía del panel para su estructura, pruebas y limitaciones de SUNAT beta.
 
 ## Prueba de conexión con SUNAT beta
 
@@ -98,8 +115,7 @@ pnpm sunat:beta --config scripts/sunat-beta/example.json
 ```
 
 Este comando sólo prepara archivos por defecto. Consulta la guía para usar tus
-datos y enviar con `--send`. La API usa el simulador con `pnpm dev:local` y SUNAT
-beta con `SUNAT_BETA_ISSUER_RUC=20615234762 pnpm dev:beta`. Producción sigue
+datos y enviar con `--send`. Tanto `pnpm dev:local` como `pnpm dev:beta` usan SUNAT beta. Cada solicitud de empresa habilita su propio emisor de Sandbox. Producción sigue
 bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
 
 ## Inicio con R2
@@ -133,7 +149,7 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
    corre en otra red, cambia juntos `BILLING_EGRESS_SUBNET`,
    `BILLING_EGRESS_GATEWAY` y `BILLING_TRUSTED_PROXY_CIDRS`.
 
-4. Para pruebas estructurales con el proveedor SUNAT simulado:
+4. Para usar el despliegue de Sandbox con SUNAT beta, configura su certificado de prueba:
 
    ```bash
    docker compose -f compose.yaml -f compose.dev.yaml up --build
@@ -148,21 +164,22 @@ bloqueada; una respuesta aceptada en beta no constituye un comprobante fiscal.
    curl http://localhost:3300/api/v1/health/ready
    ```
 
-6. Ejecuta el flujo completo de prueba. Crea un tenant aislado, emisor, serie,
+6. Ejecuta el flujo completo de prueba. Usa un Sandbox ya registrado, su emisor, serie,
    cuenta de servicio y API key; emite una factura, espera la respuesta asíncrona y
    verifica JSON, XML y PDF. No imprime credenciales:
 
    ```bash
-   pnpm smoke:mock
+   SANDBOX_API_KEY_FILE=/ruta/privada pnpm smoke:sandbox
    ```
 
    El resultado lleva `mode: mock-no-fiscal-validity`: usa datos con forma real,
-   PostgreSQL, SQS y R2 reales, pero no se presenta ante SUNAT.
+   PostgreSQL, SQS y R2 reales, y envía al servicio de pruebas de SUNAT.
 
 ## Bootstrap administrativo
 
-La plataforma valida JWT emitidos por el proveedor administrativo; no implementa
-login ni almacena contraseñas humanas. Para desarrollo puede emitirse un JWT de
+El panel utiliza Cognito para el login de personas; consulta la
+[guía de identidad](deploy/identity/README.md). La plataforma conserva los JWT
+administrativos para bootstrap e integraciones existentes y no almacena contraseñas humanas. Para desarrollo puede emitirse un JWT de
 plataforma válido durante 15 minutos:
 
 ```bash
