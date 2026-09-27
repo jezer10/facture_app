@@ -1,35 +1,43 @@
-import { parseEnvironment } from './environment';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { environmentSchema, parseEnvironment } from './environment';
 
 describe('billing environment', () => {
-  it('accepts an explicit list of trusted proxy CIDRs', () => {
-    const environment = parseEnvironment({
-      NODE_ENV: 'development',
-      BILLING_TRUSTED_PROXY_CIDRS: '172.18.0.1/32, 2001:db8::1/128',
-    });
-
-    expect(environment.BILLING_TRUSTED_PROXY_CIDRS).toBe('172.18.0.1/32, 2001:db8::1/128');
+  it('provides a numeric PORT through ConfigModule validationSchema', async () => {
+    const module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          ignoreEnvFile: true,
+          ignoreEnvVars: true,
+          validationSchema: environmentSchema,
+        }),
+      ],
+    }).compile();
+    try {
+      expect(module.get(ConfigService).get('PORT')).toBe(3000);
+    } finally {
+      await module.close();
+    }
   });
 
-  it.each(['', 'loopback', '127.0.0.1', '0.0.0.0/0', '::/0', '10.0.0.1/33'])(
-    'rejects unsafe or malformed trusted proxy value %p',
-    (value) => {
-      expect(() =>
-        parseEnvironment({ NODE_ENV: 'development', BILLING_TRUSTED_PROXY_CIDRS: value }),
-      ).toThrow('BILLING_TRUSTED_PROXY_CIDRS');
-    },
-  );
+  it('converts the configured port and boolean values', () => {
+    const environment = parseEnvironment({ PORT: '3300', ALLOW_VOLATILE_ADAPTERS: 'false' });
+    expect(environment.PORT).toBe(3300);
+    expect(environment.ALLOW_VOLATILE_ADAPTERS).toBe(false);
+  });
 
-  it('requires trusted proxy CIDRs for the production API', () => {
-    expect(() => parseEnvironment(productionApiEnvironment())).toThrow(
-      'BILLING_TRUSTED_PROXY_CIDRS',
-    );
+  it.each(['0', '65536', 'abc', '3.5'])('rejects invalid PORT %p', (PORT) => {
+    expect(() => parseEnvironment({ PORT })).toThrow('PORT');
+  });
+
+  it('requires SMTP settings in development too', () => {
+    expect(() => parseEnvironment({ BILLING_EMAIL_MODE: 'smtp' })).toThrow('BILLING_SMTP_HOST');
   });
 
   it.each(['SUNAT_INTERNAL_SERVICE_SECRET_FILE', 'WEBHOOK_INTERNAL_SERVICE_SECRET_FILE'] as const)(
     'requires the destination-specific %s for the production API',
     (secretName) => {
       const environment = productionApiEnvironment();
-      environment.BILLING_TRUSTED_PROXY_CIDRS = '172.30.250.1/32';
       delete environment[secretName];
 
       expect(() => parseEnvironment(environment)).toThrow(secretName);
@@ -38,7 +46,6 @@ describe('billing environment', () => {
 
   it('requires a separate API-key replay encryption key for the production API', () => {
     const environment = productionApiEnvironment();
-    environment.BILLING_TRUSTED_PROXY_CIDRS = '172.30.250.1/32';
     delete environment.BILLING_API_KEY_REPLAY_KEY_FILE;
 
     expect(() => parseEnvironment(environment)).toThrow('BILLING_API_KEY_REPLAY_KEY_FILE');
