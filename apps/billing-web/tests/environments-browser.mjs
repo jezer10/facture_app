@@ -105,13 +105,11 @@ try {
   assert.equal(await page.getByText('test-prefix').count(), 0);
   await page.getByLabel('Usuario SOL secundario').fill('test-user');
   await page.getByLabel('Contraseña SOL', { exact: true }).fill('test-password');
-  await page
-    .getByLabel('Certificado digital P12/PFX')
-    .setInputFiles({
-      name: 'test.p12',
-      mimeType: 'application/x-pkcs12',
-      buffer: Buffer.from('test-only'),
-    });
+  await page.getByLabel('Certificado digital P12/PFX').setInputFiles({
+    name: 'test.p12',
+    mimeType: 'application/x-pkcs12',
+    buffer: Buffer.from('test-only'),
+  });
   await page.getByLabel('Contraseña del certificado').fill('test-certificate-password');
   await page.getByRole('button', { name: 'Guardar credenciales' }).click();
   await page.getByText('Credenciales guardadas cifradas.', { exact: false }).waitFor();
