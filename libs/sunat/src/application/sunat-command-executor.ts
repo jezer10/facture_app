@@ -177,6 +177,7 @@ export class SunatCommandExecutor {
         identity,
         command.payload.reason,
         credentials,
+        { organizationId: command.organizationId, snapshot },
       );
       await this.recordSubmissionOutcome(
         submission.submissionId,
@@ -207,7 +208,12 @@ export class SunatCommandExecutor {
           result: await this.buildResultEnvelope(command, 'sunat.document.rejected.v1', rejected),
         };
       }
-      return this.voidedOutput(command, snapshot.documentId, outcome.providerTrackingId);
+      return this.voidedOutput(
+        command,
+        snapshot.documentId,
+        outcome.providerTrackingId,
+        outcome.artifacts,
+      );
     } catch (error) {
       if (!(error instanceof SunatSubmissionAmbiguousError)) {
         await this.recordSubmissionFailure(
@@ -487,7 +493,7 @@ export class SunatCommandExecutor {
   ): Promise<CompletedSunatCommand> {
     const submissionId = outcome.providerTrackingId ?? command.payload.submissionId;
     if (outcome.status === 'voided') {
-      return this.voidedOutput(command, snapshot.documentId, submissionId);
+      return this.voidedOutput(command, snapshot.documentId, submissionId, outcome.artifacts);
     }
     if (outcome.status === 'rejected') {
       const payload: RejectedDocumentResultPayload = {
@@ -560,12 +566,13 @@ export class SunatCommandExecutor {
     command: SunatCommandEnvelope,
     documentId: string,
     submissionId: string,
+    artifacts: readonly ArtifactReference[] = [],
   ): Promise<CompletedSunatCommand> {
     const payload: VoidedDocumentResultPayload = {
       documentId,
       submissionId,
       voidedAt: this.now().toISOString(),
-      artifacts: [],
+      artifacts,
     };
     return {
       result: await this.buildResultEnvelope(command, 'sunat.document.voided.v1', payload),
@@ -714,7 +721,7 @@ export class SunatCommandExecutor {
       };
     }
     if (submission.status === 'voided') {
-      return this.voidedOutput(command, snapshot.documentId, providerTrackingId);
+      return this.voidedOutput(command, snapshot.documentId, providerTrackingId, artifacts);
     }
     if (
       submission.status === 'accepted' &&

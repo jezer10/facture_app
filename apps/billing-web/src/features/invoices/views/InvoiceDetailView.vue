@@ -27,7 +27,7 @@ const pending = computed(
 );
 const canVoid = computed(
   () =>
-    environment.value?.sunat === 'mock' &&
+    environment.value?.capabilities.voids &&
     doc.value &&
     ['accepted', 'accepted_with_observations'].includes(doc.value.status),
 );
@@ -110,7 +110,7 @@ async function requestVoid() {
 </script>
 <template>
   <RouterLink to="/facturas" class="back-link"
-    ><AppIcon name="back" :size="16" />Volver a facturas</RouterLink
+    ><AppIcon name="back" :size="16" />Volver a comprobantes</RouterLink
   >
   <div v-if="!connected" class="panel empty-state">
     <h1 tabindex="-1">Conecta tu organización</h1>
@@ -218,6 +218,9 @@ async function requestVoid() {
                   { kind: 'pdf', label: 'Descargar PDF' },
                   { kind: 'xml', label: 'Descargar XML' },
                   { kind: 'cdr', label: 'Descargar CDR' },
+                  ...(doc.status === 'voided'
+                    ? [{ kind: 'void-cdr', label: 'Descargar CDR de baja' }]
+                    : []),
                 ]"
                 :key="file.kind"
                 :busy="downloading === file.kind"
@@ -233,10 +236,28 @@ async function requestVoid() {
               procesamiento.
             </p>
           </section>
+          <section
+            v-if="
+              ['01', '03'].includes(doc.documentType) &&
+              ['accepted', 'accepted_with_observations'].includes(doc.status)
+            "
+            class="void-section"
+          >
+            <h2>Notas vinculadas</h2>
+            <RouterLink
+              :to="{ path: '/facturas/nueva', query: { type: '07', reference: doc.id } }"
+              class="button button--secondary"
+              >Crear nota de crédito</RouterLink
+            ><RouterLink
+              :to="{ path: '/facturas/nueva', query: { type: '08', reference: doc.id } }"
+              class="button button--secondary"
+              >Crear nota de débito</RouterLink
+            >
+          </section>
           <section class="void-section">
             <h2>Anulación</h2>
-            <p v-if="environment?.sunat === 'beta'" class="section-description">
-              La anulación todavía no está disponible en SUNAT beta.
+            <p v-if="!environment?.capabilities.voids" class="section-description">
+              La baja todavía no está habilitada para este ambiente.
             </p>
             <p v-else-if="!canVoid" class="section-description">
               Solo se pueden anular comprobantes aceptados en un entorno compatible.

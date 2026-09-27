@@ -20,6 +20,8 @@ import { AddNativeLoginChallenges1790294580000 } from './migrations/202609250004
 
 import { AddBrowserIdentityTokens1790380800000 } from './migrations/202609260001-add-browser-identity-tokens';
 
+import { CompanyEnvironments1790467200000 } from './migrations/202609270001-company-environments';
+
 const environment = parseEnvironment(process.env);
 
 export const coreDataSourceOptions = {
@@ -41,6 +43,7 @@ export const coreDataSourceOptions = {
     AddCompanyRegistrations1790294520000,
     AddNativeLoginChallenges1790294580000,
     AddBrowserIdentityTokens1790380800000,
+    CompanyEnvironments1790467200000,
   ],
   migrationsTableName: 'typeorm_migrations',
   migrationsRun: false,

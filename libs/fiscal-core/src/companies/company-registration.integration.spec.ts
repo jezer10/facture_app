@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { DataSource, type QueryRunner } from 'typeorm';
+import { CORE_ENTITIES } from '../database/entities';
+import { FiscalDocumentsService } from '../documents/fiscal-documents.service';
 import { CompanyRegistrationService, type CompanyData } from './company-registration.service';
 
 // Explicit local-only opt-in; all test data is rolled back, including approved companies.
@@ -13,6 +15,7 @@ integration('company registration with real PostgreSQL transactions', () => {
   beforeAll(async () => {
     database = new DataSource({
       type: 'postgres',
+      entities: [...CORE_ENTITIES],
       host: '127.0.0.1',
       port: 54330,
       username: 'billing_core',
@@ -66,9 +69,9 @@ integration('company registration with real PostgreSQL transactions', () => {
       data,
     );
     await expect(service.submit('other-test-subject', first)).rejects.toThrow('No encontramos');
-    await service.submit(subject, first);
+    const sandbox = await service.submit(subject, first);
     await service.submit('other-test-subject', second);
-    expect(await runner.query('SELECT id FROM issuers WHERE ruc=$1', [ruc])).toHaveLength(0);
+    expect(await runner.query('SELECT id FROM issuers WHERE ruc=$1', [ruc])).toHaveLength(2);
     const approved = await service.decide(
       first,
       'independent-test-reviewer',
@@ -77,6 +80,76 @@ integration('company registration with real PostgreSQL transactions', () => {
       'Test evidence reference',
     );
     expect(approved.status).toBe('approved');
+    expect(approved.sandbox_organization_id).toBe(sandbox.sandbox_organization_id);
+    expect(approved.organization_id).not.toBe(sandbox.sandbox_organization_id);
+    const documents = new FiscalDocumentsService({
+      transaction: (_isolation: unknown, callback: (manager: typeof runner.manager) => unknown) =>
+        callback(runner.manager),
+      manager: runner.manager,
+      getRepository: runner.manager.getRepository.bind(runner.manager),
+    } as unknown as DataSource);
+    const [sandboxSeries] = await runner.manager.query<{ id: string }[]>(
+      'SELECT id FROM issuer_series WHERE issuer_id=$1 AND document_type=$2',
+      [sandbox.sandbox_issuer_id, '01'],
+    );
+    const principal = {
+      organizationId: sandbox.sandbox_organization_id!,
+      subject,
+      correlationId: randomUUID(),
+    };
+    const document = await documents.create(principal, {
+      idempotencyKey: 'isolated-test',
+      input: {
+        issuerId: sandbox.sandbox_issuer_id!,
+        seriesId: sandboxSeries!.id,
+        documentType: '01',
+        issueDate: '2026-09-27',
+        currency: 'PEN',
+        customer: {
+          identityType: '6',
+          identityNumber: '20100070970',
+          legalName: 'Sandbox customer',
+        },
+        lines: [
+          {
+            description: 'Sandbox test',
+            unitCode: 'NIU',
+            quantity: '2',
+            unitValue: '10',
+            taxAffectation: 'taxed',
+            taxRate: '0.18',
+          },
+        ],
+      },
+    });
+    expect(document.number).toBe('1');
+    await expect(
+      documents.get({ ...principal, organizationId: approved.organization_id! }, document.id),
+    ).rejects.toThrow('not found');
+    expect(
+      await documents.list({ ...principal, organizationId: approved.organization_id! }),
+    ).toHaveLength(0);
+    const [productionSeries] = await runner.manager.query<{ next_number: string }[]>(
+      'SELECT next_number FROM issuer_series WHERE issuer_id=$1 AND document_type=$2',
+      [approved.issuer_id, '01'],
+    );
+    expect(productionSeries!.next_number).toBe('1');
+    // A forged environment selection cannot turn a sandbox operation into production.
+    await expect(
+      documents.requestVoid(
+        { ...principal, organizationId: approved.organization_id! },
+        { documentId: document.id, reason: 'No cross-environment operations' },
+      ),
+    ).rejects.toThrow('productiva');
+    await runner.query('SAVEPOINT isolation_check');
+    await expect(
+      runner.query('UPDATE organizations SET environment=$2 WHERE id=$1', [
+        sandbox.sandbox_organization_id,
+        'production',
+      ]),
+    ).rejects.toThrow('immutable');
+    await runner.query('ROLLBACK TO SAVEPOINT isolation_check');
+
     expect(
       await runner.query(
         'SELECT id FROM organization_members WHERE organization_id=$1 AND subject=$2',
@@ -88,7 +161,7 @@ integration('company registration with real PostgreSQL transactions', () => {
         approved.issuer_id,
         approved.organization_id,
       ]),
-    ).toHaveLength(1);
+    ).toHaveLength(6);
     expect(
       await runner.query('SELECT id FROM company_registration_events WHERE registration_id=$1', [
         first,

@@ -35,10 +35,7 @@ function run(command, args, env = process.env) {
 }
 
 async function main() {
-  const beta = process.argv.includes('--beta');
-  const betaRuc = process.env.SUNAT_BETA_ISSUER_RUC;
-  if (beta && !/^20\d{9}$/u.test(betaRuc ?? ''))
-    throw new Error('Set SUNAT_BETA_ISSUER_RUC to the issuer RUC for beta.');
+  const beta = true;
   await run('sh', ['scripts/generate-development-secrets.sh']);
   for (const [name, bytes] of [
     ['minio_access_key', 16],
@@ -132,16 +129,15 @@ async function main() {
     BILLING_API_KEY_REPLAY_KEY_FILE: secret('api_key_replay_key'),
     SUNAT_INTERNAL_SERVICE_SECRET_FILE: secret('sunat_internal_secret'),
     WEBHOOK_INTERNAL_SERVICE_SECRET_FILE: secret('webhook_internal_secret'),
-    SUNAT_PROVIDER_MODE: beta ? 'beta' : 'mock',
+    SUNAT_PROVIDER_MODE: 'beta',
+    BILLING_MASTER_KEY_FILE: secret('sunat_master_key'),
     BILLING_EMAIL_MODE: beta ? 'mailpit' : 'disabled',
     ...(beta
       ? {
-          SUNAT_BETA_ISSUER_RUC: betaRuc,
           SUNAT_BETA_KEY_FILE: secret('beta_private.key'),
           SUNAT_BETA_CERT_FILE: secret('beta_certificate.pem'),
         }
       : {}),
-    SUNAT_MOCK_ALLOW_ANY_ISSUER: 'true',
     R2_ENDPOINT: 'http://127.0.0.1:59000',
     R2_REGION: 'us-east-1',
     R2_BUCKET: 'billing-private',

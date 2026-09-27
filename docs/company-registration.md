@@ -7,9 +7,9 @@ La pantalla `/empresas` permite a una persona autenticada (aunque no pertenezca 
 ## Autorización y estados
 
 - `draft`: solo su solicitante puede leerlo o editarlo.
-- `pending`: datos inmutables para revisión manual. No crea emisor, organización ni acceso y no reserva el RUC. Distintas personas pueden solicitar el mismo RUC.
-- `approved`: un revisor independiente crea organización, membresía owner, emisor y serie en una única transacción. El usuario puede abrir la empresa desde Mis empresas.
-- `rejected`: no otorga acceso. La persona puede preparar una solicitud nueva corregida.
+- `pending`: datos inmutables para revisión manual. Crea un Sandbox privado con emisor y series; no concede acceso productivo ni reserva el RUC productivo. Distintas personas pueden solicitar el mismo RUC.
+- `approved`: un revisor independiente crea el espacio productivo separado, membresía owner, emisor y series en una única transacción. El usuario puede abrir la empresa desde Mis empresas.
+- `rejected`: no otorga acceso a Producción; conserva las pruebas en Sandbox. La persona puede preparar una solicitud nueva corregida.
 
 La sesión Cognito y CSRF protegen las rutas de solicitantes. El cliente no puede elegir sujeto, estado, organización ni aprobador. Las decisiones requieren el rol **platformAdmin**, que las sesiones web no reciben. Ser owner de una organización no da permiso de revisión. El solicitante no puede aprobarse a sí mismo.
 
@@ -23,12 +23,14 @@ La operación de revisión es administrativa por API; no hay panel de revisores 
 4. Registrar la decisión con `POST /api/v1/admin/company-registrations/:id/decision`. Cuerpo: `decision` (`approve`/`reject`), `note` (10–800 caracteres, visible al solicitante), `evidenceReference` (referencia interna, no documentos ni secretos), `registryChecked` y `authorityChecked`. Aprobar exige ambas comprobaciones y una referencia de al menos 10 caracteres. Esas casillas documentan la revisión humana; no sustituyen una comprobación real.
 5. Toda presentación y decisión queda en `company_registration_events`. El evento conserva actor, fecha y referencia interna. La nota pública debe permitir corregir una solicitud rechazada sin divulgar datos ajenos.
 
-Un RUC que ya tiene emisor **no se transfiere ni concede membresía**: la aprobación devuelve conflicto. El operador debe gestionar la reclamación con el administrador acreditado por un procedimiento separado. No se ha implementado transferencia automatizada ni recuperación de propiedad.
+Un RUC que ya tiene emisor productivo **no se transfiere ni concede membresía**: la aprobación devuelve conflicto. El operador debe gestionar la reclamación con el administrador acreditado por un procedimiento separado. No se ha implementado transferencia automatizada ni recuperación de propiedad.
 
 ## Compatibilidad y operación
 
-`POST /issuers` deja de permitir el alta directa y devuelve 403, evitando saltarse la revisión. Los emisores existentes permanecen sin cambios: esta entrega no certifica retroactivamente sus identidades. Los scripts antiguos de bootstrap que creaban emisores directamente deben usar datos de prueba ya provisionados o el flujo administrativo de revisión. `smoke:beta --reuse` sigue usando su emisor existente.
+`POST /issuers` deja de permitir el alta directa y devuelve 403, evitando saltarse la revisión. Los emisores existentes permanecen sin cambios: esta entrega no certifica retroactivamente sus identidades. Los scripts antiguos de bootstrap que creaban emisores directamente deben usar datos de prueba ya provisionados o el flujo administrativo de revisión. `SANDBOX_API_KEY_FILE=/ruta/privada pnpm smoke:sandbox` usa una clave creada en el Sandbox.
 
 Tras aprobar se crea una serie nueva de factura (Fxxx), correlativo 1. No usar una serie previamente emitida en otro sistema. Certificados, credenciales y la conexión SUNAT se configuran por separado; la aprobación no acredita que esa integración esté lista. La organización de la empresa es distinta del espacio provisional de desarrollo. La selección de empresa vuelve a comprobar la membresía.
 
 Validación local: `RUN_COMPANY_DB_TESTS=1 pnpm test --runTestsByPath libs/fiscal-core/src/companies/company-registration.integration.spec.ts` (PostgreSQL local iniciado, migraciones aplicadas, datos de prueba revertidos). UI: `node apps/billing-web/tests/companies-browser.mjs` con Vite iniciado; usa API simulada, no envía solicitudes reales.
+
+El modelo actualizado de aislamiento y sus límites se describe en [Ambientes por empresa](company-environments.md).

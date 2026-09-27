@@ -41,20 +41,14 @@ import {
   DirectSunatProviderAdapter,
   OFFICIAL_SUNAT_ENDPOINTS,
 } from './infrastructure/direct/direct-sunat-provider.adapter';
-import { MockIssuerCredentialAdapter } from './infrastructure/mock/mock-issuer-credential.adapter';
-import { MockSunatProviderAdapter } from './infrastructure/mock/mock-sunat-provider.adapter';
-import { InMemoryCommandLedgerAdapter } from './infrastructure/persistence/in-memory-command-ledger.adapter';
-import { InMemorySubmissionJournalAdapter } from './infrastructure/persistence/in-memory-submission-journal.adapter';
 import {
   SUNAT_SUBMISSION_JOURNAL_PORT,
   type SunatSubmissionJournalPort,
 } from './domain/ports/submission-journal.port';
-import { MockOnlyXmlSignerAdapter } from './infrastructure/signing/mock-only-xml-signer.adapter';
 import { TypeOrmCommandLedgerAdapter } from './infrastructure/persistence/typeorm-command-ledger.adapter';
 import { TypeOrmIssuerCredentialAdapter } from './infrastructure/persistence/typeorm-issuer-credential.adapter';
 import { TypeOrmSubmissionJournalAdapter } from './infrastructure/persistence/typeorm-submission-journal.adapter';
 import { UnverifiedPkcs12XmlSignerAdapter } from './infrastructure/signing/unverified-pkcs12-xml-signer.adapter';
-import { InMemorySunatStoreAdapter } from './infrastructure/storage/in-memory-sunat-store.adapter';
 import { R2SunatStoreAdapter } from './infrastructure/storage/r2-sunat-store.adapter';
 import { DeterministicUblBuilder } from './infrastructure/ubl/deterministic-ubl-builder';
 import {
@@ -72,25 +66,15 @@ import {
   SUNAT_INTERNAL_SERVICE_SECRET,
 } from './provisioning/provisioning.tokens';
 
-export interface SunatMockModuleOptions {
-  /** Explicit opt-in prevents volatile adapters from being selected accidentally. */
-  readonly allowVolatileAdapters: true;
-  readonly issuerIds?: readonly string[];
-  /** Development-only opt-in for dynamic issuer creation in an integrated stack. */
-  readonly allowAnyIssuer?: boolean;
-}
-
 @Module({})
 export class SunatModule {
   static forBeta(): DynamicModule {
     assertBetaOnly();
     const env = parseEnvironment(process.env);
-    if (!env.SUNAT_BETA_ISSUER_RUC || !env.SUNAT_BETA_KEY_FILE || !env.SUNAT_BETA_CERT_FILE) {
-      throw new SunatUnsafeConfigurationError(
-        'Configura el RUC y certificado de prueba para beta.',
-      );
+    if (!env.SUNAT_BETA_KEY_FILE || !env.SUNAT_BETA_CERT_FILE) {
+      throw new SunatUnsafeConfigurationError('Configura el certificado de prueba de Sandbox.');
     }
-    const persistent = this.forDurableMock({ allowAnyIssuer: false });
+    const persistent = this.forProduction();
     return {
       ...persistent,
       providers: [
@@ -103,153 +87,17 @@ export class SunatModule {
         { provide: ISSUER_CREDENTIAL_PORT, useFactory: () => new BetaCredentials() },
         {
           provide: UBL_BUILDER_PORT,
-          useFactory: () => new BetaUblBuilder(env.SUNAT_BETA_ISSUER_RUC!),
+          useFactory: () => new BetaUblBuilder(),
         },
         {
           provide: SUNAT_PROVIDER_PORT,
-          inject: [OBJECT_STORAGE_PORT, BetaSigner],
-          useFactory: (storage: ObjectStoragePort, signer: BetaSigner) =>
-            new BetaSunatProvider(storage, signer),
+          inject: [OBJECT_STORAGE_PORT, BetaSigner, DataSource],
+          useFactory: (storage: ObjectStoragePort, signer: BetaSigner, database: DataSource) =>
+            new BetaSunatProvider(storage, signer, database),
         },
       ],
     };
   }
-  static forMock(options: SunatMockModuleOptions): DynamicModule {
-    assertMockConfiguration(options.allowAnyIssuer);
-    if (options.allowVolatileAdapters !== true) {
-      throw new SunatUnsafeConfigurationError(
-        'El módulo SUNAT mock requiere habilitar adaptadores volátiles explícitamente.',
-      );
-    }
-
-    return {
-      module: SunatModule,
-      providers: [
-        InMemorySunatStoreAdapter,
-        {
-          provide: SUNAT_PAYLOAD_STORE_PORT,
-          useExisting: InMemorySunatStoreAdapter,
-        },
-        {
-          provide: SUNAT_ARTIFACT_STORE_PORT,
-          useExisting: InMemorySunatStoreAdapter,
-        },
-        {
-          provide: SUNAT_COMMAND_LEDGER_PORT,
-          useFactory: () => new InMemoryCommandLedgerAdapter<CompletedSunatCommand>(),
-        },
-        {
-          provide: SUNAT_SUBMISSION_JOURNAL_PORT,
-          useClass: InMemorySubmissionJournalAdapter,
-        },
-        {
-          provide: ISSUER_CREDENTIAL_PORT,
-          useFactory: () =>
-            new MockIssuerCredentialAdapter(options.issuerIds, options.allowAnyIssuer),
-        },
-        { provide: SUNAT_PROVIDER_PORT, useClass: MockSunatProviderAdapter },
-        { provide: XML_SIGNER_PORT, useClass: MockOnlyXmlSignerAdapter },
-        { provide: UBL_BUILDER_PORT, useClass: DeterministicUblBuilder },
-        {
-          provide: SunatCommandExecutor,
-          inject: [
-            SUNAT_PROVIDER_PORT,
-            XML_SIGNER_PORT,
-            UBL_BUILDER_PORT,
-            ISSUER_CREDENTIAL_PORT,
-            SUNAT_PAYLOAD_STORE_PORT,
-            SUNAT_ARTIFACT_STORE_PORT,
-            SUNAT_COMMAND_LEDGER_PORT,
-            SUNAT_SUBMISSION_JOURNAL_PORT,
-          ],
-          useFactory: (
-            provider: SunatProviderPort,
-            signer: XmlSignerPort,
-            ublBuilder: UblBuilderPort,
-            credentials: IssuerCredentialPort,
-            payloadStore: SunatPayloadStorePort,
-            artifactStore: SunatArtifactStorePort,
-            ledger: SunatCommandLedgerPort<CompletedSunatCommand>,
-            submissionJournal: SunatSubmissionJournalPort,
-          ) =>
-            new SunatCommandExecutor({
-              provider,
-              signer,
-              ublBuilder,
-              credentials,
-              payloadStore,
-              artifactStore,
-              ledger,
-              submissionJournal,
-            }),
-        },
-      ],
-      exports: [
-        SunatCommandExecutor,
-        SUNAT_PROVIDER_PORT,
-        XML_SIGNER_PORT,
-        ISSUER_CREDENTIAL_PORT,
-        SUNAT_PAYLOAD_STORE_PORT,
-        SUNAT_ARTIFACT_STORE_PORT,
-        SUNAT_COMMAND_LEDGER_PORT,
-        SUNAT_SUBMISSION_JOURNAL_PORT,
-      ],
-    };
-  }
-
-  static forDurableMock(
-    options: Omit<SunatMockModuleOptions, 'allowVolatileAdapters'>,
-  ): DynamicModule {
-    assertMockConfiguration(options.allowAnyIssuer);
-    return {
-      module: SunatModule,
-      imports: [SunatDatabaseModule, ObjectStorageModule],
-      providers: [
-        {
-          provide: R2SunatStoreAdapter,
-          inject: [OBJECT_STORAGE_PORT],
-          useFactory: (storage: ObjectStoragePort) => new R2SunatStoreAdapter(storage),
-        },
-        { provide: SUNAT_PAYLOAD_STORE_PORT, useExisting: R2SunatStoreAdapter },
-        { provide: SUNAT_ARTIFACT_STORE_PORT, useExisting: R2SunatStoreAdapter },
-        {
-          provide: TypeOrmCommandLedgerAdapter,
-          inject: [DataSource],
-          useFactory: (dataSource: DataSource) => new TypeOrmCommandLedgerAdapter(dataSource),
-        },
-        { provide: SUNAT_COMMAND_LEDGER_PORT, useExisting: TypeOrmCommandLedgerAdapter },
-        {
-          provide: TypeOrmSubmissionJournalAdapter,
-          inject: [DataSource],
-          useFactory: (dataSource: DataSource) => new TypeOrmSubmissionJournalAdapter(dataSource),
-        },
-        {
-          provide: SUNAT_SUBMISSION_JOURNAL_PORT,
-          useExisting: TypeOrmSubmissionJournalAdapter,
-        },
-        {
-          provide: ISSUER_CREDENTIAL_PORT,
-          useFactory: () =>
-            new MockIssuerCredentialAdapter(options.issuerIds, options.allowAnyIssuer),
-        },
-        { provide: SUNAT_PROVIDER_PORT, useClass: MockSunatProviderAdapter },
-        { provide: XML_SIGNER_PORT, useClass: MockOnlyXmlSignerAdapter },
-        { provide: UBL_BUILDER_PORT, useClass: DeterministicUblBuilder },
-        commandExecutorProvider(),
-      ],
-      exports: [
-        SunatCommandExecutor,
-        SUNAT_PROVIDER_PORT,
-        XML_SIGNER_PORT,
-        ISSUER_CREDENTIAL_PORT,
-        SUNAT_PAYLOAD_STORE_PORT,
-        SUNAT_ARTIFACT_STORE_PORT,
-        SUNAT_COMMAND_LEDGER_PORT,
-        SUNAT_SUBMISSION_JOURNAL_PORT,
-      ],
-    };
-  }
-
   static forProduction(): DynamicModule {
     return {
       module: SunatModule,
@@ -414,17 +262,4 @@ function parseSunatEnvironment(value: string | undefined): 'beta' | 'production'
     throw new SunatUnsafeConfigurationError('SUNAT_ENVIRONMENT debe ser beta o production.');
   }
   return environment;
-}
-
-function assertMockConfiguration(allowAnyIssuer: boolean | undefined): void {
-  if (process.env.NODE_ENV === 'production') {
-    throw new SunatUnsafeConfigurationError(
-      'El proveedor SUNAT mock está prohibido en producción.',
-    );
-  }
-  if (allowAnyIssuer && process.env.SUNAT_PROVIDER_MODE === 'production') {
-    throw new SunatUnsafeConfigurationError(
-      'La habilitación abierta de emisores sólo puede usarse con el proveedor mock.',
-    );
-  }
 }

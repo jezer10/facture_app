@@ -11,6 +11,15 @@ import type { EncryptedEnvelope } from '@app/platform';
 
 @Entity({ name: 'organizations' })
 export class OrganizationEntity {
+  @Column({ type: 'varchar', length: 10, default: 'sandbox' })
+  environment!: 'sandbox' | 'production';
+
+  @Column({ name: 'company_id', type: 'uuid', nullable: true })
+  companyId!: string | null;
+
+  @Column({ name: 'verified_at', type: 'timestamptz', nullable: true })
+  verifiedAt!: Date | null;
+
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -138,6 +147,9 @@ export class ApiKeyCreationRequestEntity {
 
 @Entity({ name: 'issuers' })
 export class IssuerEntity {
+  @Column({ type: 'varchar', length: 10, insert: false, update: false })
+  environment!: 'sandbox' | 'production';
+
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -145,7 +157,7 @@ export class IssuerEntity {
   @Column({ name: 'organization_id', type: 'uuid' })
   organizationId!: string;
 
-  @Index({ unique: true })
+  @Index()
   @Column({ type: 'char', length: 11 })
   ruc!: string;
 

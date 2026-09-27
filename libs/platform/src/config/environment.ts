@@ -91,29 +91,47 @@ const environmentSchema = z
     R2_SECRET_ACCESS_KEY_FILE: z.string().min(1).optional(),
     R2_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
     ALLOW_VOLATILE_ADAPTERS: booleanFromString,
-    SUNAT_PROVIDER_MODE: z.enum(['mock', 'beta', 'production']).default('mock'),
+    SUNAT_PROVIDER_MODE: z.enum(['beta', 'production']).default('beta'),
     SUNAT_BETA_ISSUER_RUC: z
       .string()
       .regex(/^20\d{9}$/u)
       .optional(),
     SUNAT_BETA_KEY_FILE: z.string().optional(),
     SUNAT_BETA_CERT_FILE: z.string().optional(),
-    BILLING_EMAIL_MODE: z.enum(['disabled', 'mailpit']).default('disabled'),
+    BILLING_EMAIL_MODE: z.enum(['disabled', 'mailpit', 'smtp']).default('disabled'),
+    BILLING_SMTP_HOST: z.string().min(1).optional(),
+    BILLING_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+    BILLING_SMTP_USER: z.string().min(1).optional(),
+    BILLING_SMTP_PASSWORD_FILE: z.string().min(1).optional(),
+    BILLING_EMAIL_FROM: z.email().optional(),
     BILLING_MAILPIT_HOST: z.enum(['127.0.0.1', 'mailpit']).default('127.0.0.1'),
     BILLING_MAILPIT_PORT: z.coerce.number().int().min(1).max(65535).default(51025),
     SUNAT_ENVIRONMENT: z.enum(['beta', 'production']).default('production'),
     SUNAT_BILL_SERVICE_URL: z.url().optional(),
     SUNAT_CONSULT_SERVICE_URL: z.url().optional(),
-    SUNAT_MOCK_ISSUER_IDS: z.string().optional(),
-    SUNAT_MOCK_ALLOW_ANY_ISSUER: booleanFromString,
     SUNAT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
     WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(10000),
   })
   .superRefine((environment, context) => {
+    if (environment.BILLING_EMAIL_MODE === 'smtp') {
+      for (const key of [
+        'BILLING_SMTP_HOST',
+        'BILLING_SMTP_USER',
+        'BILLING_SMTP_PASSWORD_FILE',
+        'BILLING_EMAIL_FROM',
+      ] as const) {
+        if (!environment[key])
+          context.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'Required for Facture email delivery',
+          });
+      }
+    }
     if (environment.NODE_ENV !== 'production') {
       return;
     }
-    if (environment.BILLING_EMAIL_MODE !== 'disabled') {
+    if (environment.BILLING_EMAIL_MODE === 'mailpit') {
       context.addIssue({
         code: 'custom',
         path: ['BILLING_EMAIL_MODE'],
@@ -204,16 +222,6 @@ const environmentSchema = z
         code: 'custom',
         path: ['R2_ENDPOINT'],
         message: 'R2_ENDPOINT is required in production',
-      });
-    }
-    if (
-      environment.BILLING_SERVICE === 'sunat-service' &&
-      environment.SUNAT_PROVIDER_MODE !== 'production'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['SUNAT_PROVIDER_MODE'],
-        message: 'The mock SUNAT provider is forbidden in production',
       });
     }
     if (environment.ALLOW_VOLATILE_ADAPTERS) {

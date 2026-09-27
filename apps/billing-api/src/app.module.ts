@@ -1,3 +1,4 @@
+import { WorkspaceController } from './companies/workspace.controller';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -42,6 +43,7 @@ import { TaxpayerRegistryController } from './companies/taxpayer-registry.contro
     RecipientQueryModule,
   ],
   controllers: [
+    WorkspaceController,
     TaxpayerRegistryController,
     CompanyRegistrationController,
     CompanyReviewController,

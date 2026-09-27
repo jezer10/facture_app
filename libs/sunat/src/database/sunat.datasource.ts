@@ -8,6 +8,7 @@ import { SUNAT_ENTITIES } from './entities';
 import { CreateBillingSunat1787356800000 } from './migrations/202608220001-create-billing-sunat';
 import { AddCommandDeliveryOutbox1787356860000 } from './migrations/202608220002-add-command-delivery-outbox';
 
+import { BetaSummaries1790467200000 } from './migrations/202609270001-beta-summaries';
 const environment = parseEnvironment(process.env);
 const developmentLogging: LogLevel[] = ['error', 'warn'];
 
@@ -18,7 +19,11 @@ export const sunatDataSourceOptions = {
     environment.SUNAT_DATABASE_PASSWORD_FILE,
   ),
   entities: [...SUNAT_ENTITIES],
-  migrations: [CreateBillingSunat1787356800000, AddCommandDeliveryOutbox1787356860000],
+  migrations: [
+    CreateBillingSunat1787356800000,
+    AddCommandDeliveryOutbox1787356860000,
+    BetaSummaries1790467200000,
+  ],
   migrationsTableName: 'typeorm_migrations',
   migrationsRun: false,
   synchronize: false,

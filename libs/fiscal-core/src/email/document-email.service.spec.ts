@@ -49,7 +49,7 @@ afterEach(() => {
 });
 // Test doubles intentionally expose Jest matchers and mocks.
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function setup(options: { smtpFailure?: boolean; corrupt?: boolean } = {}) {
+function setup(options: { smtpFailure?: boolean; corrupt?: boolean; unverified?: boolean } = {}) {
   const sendMail = jest.fn();
   if (options.smtpFailure) sendMail.mockRejectedValue(new Error('SMTP timeout'));
   else sendMail.mockResolvedValue({});
@@ -74,6 +74,8 @@ function setup(options: { smtpFailure?: boolean; corrupt?: boolean } = {}) {
           fiscal_snapshot: { environment: 'beta' },
         },
       ]);
+    if (sql.startsWith('SELECT email FROM verified_email_recipients'))
+      return Promise.resolve(options.unverified ? [] : [{ email: 'buyer@example.test' }]);
     if (sql.includes('SELECT DISTINCT ON')) return Promise.resolve(artifacts);
     return Promise.resolve([]);
   });
@@ -92,8 +94,8 @@ it('delivers matching artifacts once with beta labeling and a deterministic Mess
   expect(sendMail).toHaveBeenCalledWith(
     expect.objectContaining({
       to: 'buyer@example.test',
-      subject: '[PRUEBA BETA] Comprobante FAPI-1',
-      messageId: `<facture-beta-${id}@facture.local>`,
+      subject: '[SANDBOX · SIN VALIDEZ FISCAL] Comprobante FAPI-1',
+      messageId: `<facture-${id}@facture.test>`,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       attachments: expect.arrayContaining([
         expect.objectContaining({ filename: 'FAPI-1.pdf', content: body }),
@@ -102,7 +104,7 @@ it('delivers matching artifacts once with beta labeling and a deterministic Mess
   );
   expect(query).toHaveBeenCalledWith(expect.stringContaining("status='sent'"), [
     id,
-    `<facture-beta-${id}@facture.local>`,
+    `<facture-${id}@facture.test>`,
   ]);
 });
 it('does not send corrupted attachments', async () => {
@@ -129,5 +131,11 @@ it('does nothing when email delivery is disabled', async () => {
   const { service, query, sendMail } = setup();
   await service.deliverPending();
   expect(query).not.toHaveBeenCalled();
+  expect(sendMail).not.toHaveBeenCalled();
+});
+
+it('never sends sandbox mail to an unverified address', async () => {
+  const { service, sendMail } = setup({ unverified: true });
+  await service.deliverPending();
   expect(sendMail).not.toHaveBeenCalled();
 });

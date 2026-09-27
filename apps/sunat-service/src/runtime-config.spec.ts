@@ -1,9 +1,4 @@
-import {
-  resultAttempts,
-  resultBackoffMs,
-  sunatMockAllowAnyIssuer,
-  sunatProviderMode,
-} from './runtime-config';
+import { resultAttempts, resultBackoffMs, sunatProviderMode } from './runtime-config';
 
 describe('sunat-service runtime configuration', () => {
   const originalEnvironment = process.env;
@@ -21,25 +16,10 @@ describe('sunat-service runtime configuration', () => {
     process.env = originalEnvironment;
   });
 
-  it('defaults to the mock provider', () => {
-    expect(sunatProviderMode()).toBe('mock');
-  });
-
-  it('refuses mock mode in production and accepts fail-closed production mode', () => {
-    process.env.NODE_ENV = 'production';
+  it('defaults to SUNAT beta and rejects the removed simulated mode', () => {
+    expect(sunatProviderMode()).toBe('beta');
+    process.env.SUNAT_PROVIDER_MODE = 'mock';
     expect(() => sunatProviderMode()).toThrow('SUNAT_PROVIDER_MODE');
-
-    process.env.NODE_ENV = 'development';
-    process.env.SUNAT_PROVIDER_MODE = 'production';
-    expect(sunatProviderMode()).toBe('production');
-  });
-
-  it('requires an explicit boolean opt-in for dynamic mock issuers', () => {
-    expect(sunatMockAllowAnyIssuer()).toBe(false);
-    process.env.SUNAT_MOCK_ALLOW_ANY_ISSUER = 'true';
-    expect(sunatMockAllowAnyIssuer()).toBe(true);
-    process.env.SUNAT_MOCK_ALLOW_ANY_ISSUER = 'yes';
-    expect(() => sunatMockAllowAnyIssuer()).toThrow('true o false');
   });
 
   it('configures bounded result-job retry defaults and validates overrides', () => {

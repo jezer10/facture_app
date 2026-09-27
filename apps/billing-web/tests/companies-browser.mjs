@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
+page.setDefaultTimeout(15000);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 let records = [];
@@ -22,7 +23,7 @@ await context.route('**/api/v1/**', async (route) => {
       organizationId: null,
     });
   if (url.pathname.endsWith('/health/mode'))
-    return respond({ sunat: 'mock', fiscalValidity: false });
+    return respond({ sunat: 'beta', fiscalValidity: false });
   if (req.method() !== 'GET') assert.equal(req.headers()['x-csrf-token'], 'csrf-test');
   if (url.pathname.endsWith('/company-registrations')) return respond(records);
   const id = url.pathname.split('/')[4];
@@ -39,6 +40,7 @@ await context.route('**/api/v1/**', async (route) => {
   }
   if (url.pathname.endsWith('/submit')) {
     records[0].status = 'pending';
+    records[0].sandbox_organization_id = 'sandbox-test';
     return respond(records[0]);
   }
   return respond({ message: 'Unexpected API request' }, 404);
@@ -82,7 +84,8 @@ try {
   await page.getByRole('button', { name: 'Enviar a revisión' }).click();
   await page.getByText('En revisión', { exact: true }).waitFor();
   assert.equal(records[0].status, 'pending');
-  assert.equal(await page.getByRole('button', { name: 'Abrir empresa' }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Entrar a Producción' }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Entrar a Sandbox' }).count(), 1);
   assert.deepEqual(errors, []);
   console.log(
     'PASS: validation, drafts restored, review declaration, pending restrictions, mobile layout, no organization required.',

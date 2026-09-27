@@ -124,20 +124,22 @@ async function advance() {
       item.id === submitted.id ? submitted : item,
     );
     editing.value = false;
-    message.value = 'Solicitud enviada a revisión. Todavía no habilita la emisión de facturas.';
+    message.value =
+      'Solicitud enviada. Tu Sandbox está listo para probar mientras validamos tu empresa.';
   } catch (e) {
     error.value = errorMessage(e);
   } finally {
     busy.value = false;
   }
 }
-async function openCompany(record: CompanyRegistration) {
-  if (!record.organization_id) return;
+async function openCompany(record: CompanyRegistration, sandbox = false) {
+  const workspaceId = sandbox ? record.sandbox_organization_id : record.organization_id;
+  if (!workspaceId) return;
   busy.value = true;
   error.value = '';
   try {
     await refreshSession();
-    await selectOrganization(record.organization_id);
+    await selectOrganization(workspaceId);
     await router.push('/facturas');
   } catch (e) {
     error.value = errorMessage(e);
@@ -196,8 +198,8 @@ onBeforeRouteLeave(() => {
       <div class="progress-help">
         <h2>Tu empresa, protegida</h2>
         <p>
-          Conocer un RUC no otorga acceso. Revisaremos tu autorización antes de crear la empresa y
-          habilitar su emisor.
+          Tu Sandbox es privado. Revisaremos tu autorización antes de habilitar el espacio de
+          Producción.
         </p>
         <p>Un borrador no reserva el RUC ni bloquea a su titular.</p>
       </div>
@@ -454,11 +456,19 @@ onBeforeRouteLeave(() => {
         </div>
         <p class="hint">{{ record.data.ruc ? `RUC ${record.data.ruc}` : 'RUC pendiente' }}</p>
         <p v-if="record.status === 'pending'" class="company-description">
-          Revisaremos los datos y tu autorización. Todavía no puedes emitir facturas con esta
-          solicitud.
+          Puedes probar en Sandbox mientras revisamos tu autorización. Producción se habilita por
+          separado.
         </p>
         <p v-if="record.decision_note" class="company-description">{{ record.decision_note }}</p>
         <div class="company-actions">
+          <button
+            v-if="record.sandbox_organization_id"
+            class="button button--primary"
+            :disabled="busy"
+            @click="openCompany(record, true)"
+          >
+            Entrar a Sandbox
+          </button>
           <button
             v-if="record.status === 'draft'"
             class="button button--secondary"
@@ -472,12 +482,12 @@ onBeforeRouteLeave(() => {
           >
             Crear solicitud corregida</button
           ><button
-            v-if="record.status === 'approved'"
+            v-if="record.status === 'approved' && record.organization_id"
             class="button button--primary"
             :disabled="busy"
             @click="openCompany(record)"
           >
-            Abrir empresa
+            Entrar a Producción
           </button>
         </div>
       </article>

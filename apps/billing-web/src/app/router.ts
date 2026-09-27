@@ -3,6 +3,11 @@ import { createRouter, createWebHistory } from 'vue-router';
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/configuracion',
+      component: () => import('@/features/settings/WorkspaceSettingsView.vue'),
+      meta: { title: 'Configuración' },
+    },
     { path: '/', redirect: '/facturas' },
     {
       path: '/empresas',

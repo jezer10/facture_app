@@ -7,7 +7,7 @@ import type { DraftLine } from '../calculation';
 import { money } from '../format';
 const lines = defineModel<DraftLine[]>({ required: true });
 const totals = computed(() => calculate(lines.value));
-defineProps<{ currency: string; beta: boolean; disabled: boolean }>();
+defineProps<{ currency: string; disabled: boolean }>();
 </script>
 <template>
   <div class="lines-heading">
@@ -15,10 +15,7 @@ defineProps<{ currency: string; beta: boolean; disabled: boolean }>();
       <h2>Productos o servicios</h2>
       <p class="section-description">Ingresa el valor unitario sin IGV.</p>
     </div>
-    <AppButton
-      v-if="!beta"
-      :disabled="disabled || lines.length >= 500"
-      @click="lines.push(newLine())"
+    <AppButton :disabled="disabled || lines.length >= 500" @click="lines.push(newLine())"
       ><AppIcon name="plus" :size="16" />Agregar ítem</AppButton
     >
   </div>
@@ -41,7 +38,6 @@ defineProps<{ currency: string; beta: boolean; disabled: boolean }>();
         min="0.0000000001"
         step="any"
         required
-        :readonly="beta"
         :disabled="disabled"
         :aria-label="`Cantidad del ítem ${index + 1}`" /></label
     ><label class="field"
@@ -51,7 +47,6 @@ defineProps<{ currency: string; beta: boolean; disabled: boolean }>();
         class="input"
         type="number"
         min="0.01"
-        :max="beta ? 500 : undefined"
         step="0.01"
         required
         placeholder="0.00"
@@ -61,7 +56,7 @@ defineProps<{ currency: string; beta: boolean; disabled: boolean }>();
       >Impuesto<select
         v-model="line.taxAffectation"
         class="input"
-        :disabled="beta || disabled"
+        :disabled="disabled"
         :aria-label="`Impuesto del ítem ${index + 1}`"
       >
         <option value="taxed">IGV 18%</option>
@@ -73,7 +68,6 @@ defineProps<{ currency: string; beta: boolean; disabled: boolean }>();
       <span>Total</span><strong>{{ money(totals.items[index], currency) }}</strong>
     </div>
     <AppButton
-      v-if="!beta"
       variant="quiet"
       :disabled="disabled || lines.length === 1"
       :aria-label="`Eliminar ítem ${index + 1}`"

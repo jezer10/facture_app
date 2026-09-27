@@ -25,6 +25,8 @@ export interface Registration {
   email: string;
   status: 'draft' | 'pending' | 'approved' | 'rejected';
   data: Partial<CompanyData>;
+  sandbox_organization_id: string | null;
+  sandbox_issuer_id: string | null;
   organization_id: string | null;
   issuer_id: string | null;
   decision_note: string | null;
@@ -53,11 +55,30 @@ export function validateCompany(data: Partial<CompanyData>): void {
 export class CompanyRegistrationService {
   constructor(private readonly database: DataSource) {}
 
-  list(subject: string): Promise<Registration[]> {
-    return this.database.query(
+  async list(subject: string): Promise<Registration[]> {
+    // Backfill legacy requests without converting their existing documents to production.
+    const records = await this.database.query<Registration[]>(
       'SELECT * FROM company_registrations WHERE subject=$1 ORDER BY created_at DESC LIMIT 100',
       [subject],
     );
+    for (const record of records) {
+      if (record.status === 'draft') continue;
+      await this.database.transaction(async (manager) => {
+        const locked = await this.lock(manager, record.id, subject);
+        await this.ensureSandbox(manager, locked);
+        if (locked.status === 'approved' && !locked.organization_id) {
+          const production = await this.createWorkspace(manager, locked, 'production');
+          await manager.query(
+            'UPDATE company_registrations SET organization_id=$2,issuer_id=$3 WHERE id=$1',
+            [locked.id, production.organizationId, production.issuerId],
+          );
+          locked.organization_id = production.organizationId;
+          locked.issuer_id = production.issuerId;
+        }
+        Object.assign(record, locked);
+      });
+    }
+    return records;
   }
   async save(
     identity: { subject: string; email: string },
@@ -85,9 +106,13 @@ export class CompanyRegistrationService {
   async submit(subject: string, id: string): Promise<Registration> {
     return this.database.transaction(async (manager) => {
       const record = await this.lock(manager, id, subject);
-      if (record.status === 'pending') return record;
+      if (record.status === 'pending') {
+        await this.ensureSandbox(manager, record);
+        return record;
+      }
       if (record.status !== 'draft') throw new ConflictException('Esta solicitud ya fue revisada.');
       validateCompany(record.data);
+      await this.ensureSandbox(manager, record);
       await manager.query(
         "UPDATE company_registrations SET status='pending',updated_at=now() WHERE id=$1",
         [id],
@@ -127,31 +152,18 @@ export class CompanyRegistrationService {
         if (evidenceReference.trim().length < 10)
           throw new BadRequestException('Registra la referencia de la evidencia verificada.');
         const data = record.data as CompanyData;
-        const existing = await manager.query<unknown[]>('SELECT id FROM issuers WHERE ruc=$1', [
-          data.ruc,
-        ]);
+        const existing = await manager.query<unknown[]>(
+          "SELECT id FROM issuers WHERE ruc=$1 AND environment='production'",
+          [data.ruc],
+        );
         if (existing.length)
           throw new ConflictException(
             'El RUC ya está registrado. Resuelve el acceso con su administrador; esta solicitud no transfiere la empresa.',
           );
-        const orgId = randomUUID(),
-          issuerId = randomUUID();
-        await manager.query('INSERT INTO organizations(id,name,slug) VALUES($1,$2,$3)', [
-          orgId,
-          data.legalName.slice(0, 160),
-          `empresa-${orgId}`,
-        ]);
-        await manager.query(
-          "INSERT INTO organization_members(id,organization_id,subject,role) VALUES($1,$2,$3,'owner')",
-          [randomUUID(), orgId, record.subject],
-        );
-        await manager.query(
-          'INSERT INTO issuers(id,organization_id,ruc,legal_name,address,active) VALUES($1,$2,$3,$4,$5,true)',
-          [issuerId, orgId, data.ruc, data.legalName, JSON.stringify({ line: data.address })],
-        );
-        await manager.query(
-          "INSERT INTO issuer_series(id,issuer_id,document_type,series,next_number,active) VALUES($1,$2,'01',$3,1,true)",
-          [randomUUID(), issuerId, data.series],
+        const { organizationId: orgId, issuerId } = await this.createWorkspace(
+          manager,
+          record,
+          'production',
         );
         await manager.query(
           "UPDATE company_registrations SET status='approved',organization_id=$2,issuer_id=$3,decision_note=$4,updated_at=now() WHERE id=$1",
@@ -179,6 +191,63 @@ export class CompanyRegistrationService {
         );
       throw error;
     }
+  }
+  private async ensureSandbox(manager: EntityManager, record: Registration): Promise<void> {
+    if (record.sandbox_organization_id) return;
+    const workspace = await this.createWorkspace(manager, record, 'sandbox');
+    await manager.query(
+      'UPDATE company_registrations SET sandbox_organization_id=$2,sandbox_issuer_id=$3 WHERE id=$1',
+      [record.id, workspace.organizationId, workspace.issuerId],
+    );
+    record.sandbox_organization_id = workspace.organizationId;
+    record.sandbox_issuer_id = workspace.issuerId;
+  }
+  private async createWorkspace(
+    manager: EntityManager,
+    record: Registration,
+    environment: 'sandbox' | 'production',
+  ): Promise<{ organizationId: string; issuerId: string }> {
+    const data = record.data as CompanyData;
+    const organizationId = randomUUID(),
+      issuerId = randomUUID();
+    await manager.query(
+      `INSERT INTO organizations(id,name,slug,environment,company_id,verified_at)
+       VALUES($1,$2,$3,$4,$5,CASE WHEN $4::varchar='production' THEN now() ELSE NULL END)`,
+      [
+        organizationId,
+        data.legalName.slice(0, 160),
+        `empresa-${organizationId}`,
+        environment,
+        record.id,
+      ],
+    );
+    await manager.query(
+      "INSERT INTO organization_members(id,organization_id,subject,role) VALUES($1,$2,$3,'owner')",
+      [randomUUID(), organizationId, record.subject],
+    );
+    await manager.query(
+      'INSERT INTO issuers(id,organization_id,ruc,legal_name,address,active) VALUES($1,$2,$3,$4,$5,true)',
+      [issuerId, organizationId, data.ruc, data.legalName, JSON.stringify({ line: data.address })],
+    );
+    for (const [type, series] of [
+      ['01', data.series],
+      ['03', 'B001'],
+      ['07', 'FC01'],
+      ['07', 'BC01'],
+      ['08', 'FD01'],
+      ['08', 'BD01'],
+    ]) {
+      await manager.query(
+        'INSERT INTO issuer_series(id,issuer_id,document_type,series,next_number,active) VALUES($1,$2,$3,$4,1,true)',
+        [randomUUID(), issuerId, type, series],
+      );
+    }
+    // This address comes from the authenticated, email-verified identity, never from form data.
+    await manager.query(
+      'INSERT INTO verified_email_recipients(organization_id,email) VALUES($1,$2) ON CONFLICT DO NOTHING',
+      [organizationId, record.email.trim().toLowerCase()],
+    );
+    return { organizationId, issuerId };
   }
   private async lock(manager: EntityManager, id: string, subject?: string): Promise<Registration> {
     const [record] = await manager.query<Registration[]>(

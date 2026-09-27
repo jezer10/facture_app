@@ -44,7 +44,7 @@ it.each([
 ])('rejects an incomplete or invalid submission', (invalid) => {
   expect(() => validateCompany(invalid)).toThrow(BadRequestException);
 });
-it('submits without creating or reserving any issuer, organization or membership', async () => {
+it('creates an isolated sandbox upon submission, without production access', async () => {
   const { service, query } = harness();
   query.mockResolvedValueOnce([record]).mockResolvedValue([]);
   expect((await service.submit('applicant', 'request')).status).toBe('pending');
@@ -52,9 +52,11 @@ it('submits without creating or reserving any issuer, organization or membership
     'request',
     'applicant',
   ]);
-  expect(JSON.stringify(query.mock.calls)).not.toMatch(
-    /INSERT INTO (issuers|organizations|organization_members)/,
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining('INSERT INTO organizations'),
+    expect.arrayContaining(['sandbox', 'request']),
   );
+  expect(JSON.stringify(query.mock.calls)).not.toContain('"production"');
 });
 it('does not reveal or submit another user’s request', async () => {
   const { service, query } = harness();

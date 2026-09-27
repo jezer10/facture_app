@@ -1,5 +1,5 @@
+import { requireIssuingWorkspace } from '../companies/workspace-policy';
 import { randomUUID } from 'node:crypto';
-import { parseEnvironment } from '@app/platform';
 
 import type {
   CreateFiscalDocumentInput,
@@ -187,6 +187,7 @@ export class FiscalDocumentsService {
   ): Promise<FiscalDocumentView> {
     const reason = normalizeVoidReason(command.reason);
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      await requireIssuingWorkspace(manager, principal.organizationId);
       const documentRepository = manager.getRepository(FiscalDocumentEntity);
       const document = await documentRepository.findOne({
         where: {
@@ -248,7 +249,19 @@ export class FiscalDocumentsService {
     idempotencyKey: string,
     prepared: PreparedCreation,
   ): Promise<FiscalDocumentView> {
+    await requireIssuingWorkspace(manager, principal.organizationId);
     const issuer = await this.loadAuthorizedIssuer(manager, principal, prepared.input.issuerId);
+    if (issuer.environment !== 'production' && prepared.input.customer.email) {
+      const verified = await manager.query<{ email: string }[]>(
+        'SELECT email FROM verified_email_recipients WHERE organization_id=$1 AND email=$2',
+        [principal.organizationId, prepared.input.customer.email.trim().toLowerCase()],
+      );
+      if (!verified.length)
+        throw new InvalidFiscalRequestError(
+          'SANDBOX_RECIPIENT_NOT_VERIFIED',
+          'En Sandbox solo puedes enviar al correo verificado de tu cuenta.',
+        );
+    }
     const existing = await manager.getRepository(IdempotencyRequestEntity).findOne({
       where: { organizationId: principal.organizationId, key: idempotencyKey },
     });
@@ -738,9 +751,7 @@ function buildSnapshots(
   const lines = calculated.lines.map((line, index) => buildLineSnapshot(input.lines[index]!, line));
   const totals = totalsRecord(calculated);
   const fiscalContent = {
-    ...(parseEnvironment(process.env).SUNAT_PROVIDER_MODE === 'beta'
-      ? { environment: 'beta' }
-      : {}),
+    environment: issuer.environment === 'production' ? 'production' : 'beta',
     currency: input.currency,
     customer,
     documentType: input.documentType,

@@ -1,6 +1,6 @@
 # Facture Web
 
-Panel de facturación en Vue 3, TypeScript, Vue Router y Tailwind CSS 4. Listado, emisión de facturas tipo 01, detalle, descargas y solicitud de anulación. Consume la API real; no incluye datos de demostración en la aplicación.
+Panel de facturación en Vue 3, TypeScript, Vue Router y Tailwind CSS 4. Listado, emisión de facturas, boletas y notas (01/03/07/08), detalle, descargas y solicitud de anulación. Consume la API real; no incluye datos de demostración en la aplicación.
 
 ## Desarrollo
 
@@ -50,7 +50,7 @@ Los contratos se importan **solo como tipos** desde `libs/contracts/src/fiscal-d
 - Conserva los importes como strings y utiliza Decimal para calcular. El servidor es la autoridad de los totales.
 - La búsqueda por cliente/RUC/número se aplica **a la página visible**; estado y emisor filtran en el servidor. La API actual no ofrece búsqueda global.
 - La emisión conserva clave de idempotencia y cuerpo idénticos ante errores inciertos. El formulario queda bloqueado para reintentar de forma segura; no recargues ni abandones un envío sin confirmar. No se persisten borradores.
-- SUNAT beta permite un ítem gravado al 18%, cantidad 1, PEN y valor neto de hasta S/500. El backend valida el RUC autorizado. Anulaciones disponibles solo en simulación; beta no las implementa. La pantalla no habilita producción.
+- Sandbox usa SUNAT beta: varios ítems, PEN/USD, notas y bajas RA/RC. Configuración permite administrar claves API y webhooks por ambiente. Producción permanece bloqueada hasta implementar y verificar su adaptador. Consulta [ambientes por empresa](../../docs/company-environments.md).
 
 ## Verificación
 
@@ -63,7 +63,7 @@ pnpm --filter @facture/web format:check
 node apps/billing-web/tests/browser.mjs
 ```
 
-Las pruebas de navegador interceptan la API con fixtures exclusivos de pruebas: paginación, filtros, errores, creación con reintento idempotente, actualización de estado, descargas, anulación, restricciones beta y aislamiento de credenciales. No emiten comprobantes. Guardan capturas en `output/billing-web/` (ignorado por Git).
+Las pruebas de navegador interceptan la API con fixtures exclusivos de pruebas: paginación, filtros, errores, creación con reintento idempotente, actualización de estado, descargas, anulación, capacidades beta y aislamiento de credenciales. No emiten comprobantes. Guardan capturas en `output/billing-web/` (ignorado por Git).
 
 ## Distribución
 

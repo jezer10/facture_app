@@ -1,10 +1,22 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { watch, ref } from 'vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
-import { session, signOut } from '@/features/session/session';
+import { session, signOut, selectOrganization } from '@/features/session/session';
 import { environment, environmentLabel, refreshEnvironment } from '@/features/session/environment';
 const logoutError = ref('');
-onMounted(refreshEnvironment);
+watch(() => session.value.organizationId, refreshEnvironment, { immediate: true });
+const switching = ref(false);
+async function switchWorkspace(event: Event) {
+  const target = (event.target as HTMLSelectElement).value;
+  switching.value = true;
+  try {
+    await selectOrganization(target);
+  } catch {
+    logoutError.value = 'No pudimos cambiar de ambiente. Vuelve a intentarlo.';
+  } finally {
+    switching.value = false;
+  }
+}
 async function disconnect() {
   logoutError.value = '';
   try {
@@ -28,13 +40,16 @@ async function disconnect() {
           to="/facturas"
           class="nav-link"
           :class="{ 'nav-link--active': $route.path.startsWith('/facturas') }"
-          ><AppIcon name="invoice" />Facturas</RouterLink
+          ><AppIcon name="invoice" />Comprobantes</RouterLink
         >
         <RouterLink to="/empresas" class="nav-link"
           ><AppIcon name="connection" />Mis empresas</RouterLink
         >
         <RouterLink to="/conexion" class="nav-link"
           ><AppIcon name="connection" />Mi cuenta</RouterLink
+        >
+        <RouterLink to="/configuracion" class="nav-link"
+          ><AppIcon name="connection" />Configuración</RouterLink
         >
       </nav>
       <div class="sidebar-bottom">
@@ -44,7 +59,21 @@ async function disconnect() {
     </aside>
     <div class="workspace">
       <header class="topbar">
-        <span class="topbar-label">Facturación electrónica</span>
+        <label v-if="session.organizations?.length" class="topbar-label"
+          >Empresa y ambiente
+          <select
+            class="input"
+            aria-label="Empresa y ambiente"
+            :value="session.organizationId ?? ''"
+            :disabled="switching || $route.path === '/facturas/nueva'"
+            @change="switchWorkspace"
+          >
+            <option disabled value="">Selecciona un ambiente</option>
+            <option v-for="org in session.organizations" :key="org.id" :value="org.id">
+              {{ org.name }} · {{ org.environment === 'production' ? 'Producción' : 'Sandbox' }}
+            </option>
+          </select> </label
+        ><span v-else class="topbar-label">Facturación electrónica</span>
         <div class="topbar-actions">
           <span class="environment"><span class="environment-dot" />{{ environmentLabel }}</span
           ><button v-if="session.authenticated" class="disconnect" @click="disconnect">
@@ -52,8 +81,8 @@ async function disconnect() {
           ><RouterLink v-else to="/conexion" class="text-link">Iniciar sesión</RouterLink>
         </div>
       </header>
-      <div v-if="environment && !environment.fiscalValidity" class="environment-notice">
-        Entorno de pruebas · Los comprobantes no tienen validez fiscal.
+      <div v-if="environment" class="environment-notice">
+        {{ environment.message }}
       </div>
       <main id="main" class="main">
         <p v-if="logoutError" class="alert alert--error" role="alert">{{ logoutError }}</p>

@@ -1,5 +1,6 @@
 import type {
   FiscalDocumentIdentity,
+  FiscalDocumentSnapshot,
   ReceivedDocumentSyncRequest,
 } from '../models/fiscal-document';
 import type {
@@ -31,6 +32,7 @@ export interface SunatProviderPort {
     identity: FiscalDocumentIdentity,
     reason: string,
     credentials: IssuerCredentialHandle,
+    context?: { organizationId: string; snapshot: FiscalDocumentSnapshot },
   ): Promise<SunatVoidOutcome>;
 
   reconcileDocument(

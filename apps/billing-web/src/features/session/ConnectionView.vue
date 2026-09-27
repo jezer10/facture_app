@@ -117,7 +117,7 @@ async function logout(global = false) {
                 aria-label="Organización"
               >
                 <option v-for="org in session.organizations" :key="org.id" :value="org.id">
-                  {{ org.name }}
+                  {{ org.name }} · {{ org.environment === 'production' ? 'Producción' : 'Sandbox' }}
                 </option>
               </select></label
             ><AppButton variant="primary" type="submit" :busy="busy"

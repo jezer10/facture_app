@@ -4,6 +4,8 @@ import { mkdir } from 'node:fs/promises';
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
+page.setDefaultTimeout(15000);
+page.on('dialog', (dialog) => dialog.accept());
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 const screenshots = new URL('../../../output/billing-web/', import.meta.url).pathname;
@@ -40,7 +42,7 @@ const fixture = (i, status = 'accepted') => ({
   totals: { payableAmount: '118', taxableAmount: '100', igvAmount: '18' },
 });
 let authenticated = false;
-let mode = 'mock';
+let mode = 'beta';
 let listError = false;
 let created = false;
 let voided = false;
@@ -53,8 +55,18 @@ await context.route('**/api/v1/**', async (route) => {
   const path = url.pathname;
   const respond = (json, status = 200) =>
     route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) });
-  if (path.endsWith('/health/mode'))
-    return respond({ sunat: mode, email: 'local', fiscalValidity: false });
+  if (path.endsWith('/workspace'))
+    return respond({
+      id: 'org-test',
+      environment: 'sandbox',
+      sunat: mode,
+      email: 'mailpit',
+      fiscalValidity: false,
+      canIssue: true,
+      message: 'Sandbox · Sin validez fiscal',
+      verifiedRecipients: ['test@example.test'],
+      capabilities: { documentTypes: ['01', '03', '07', '08'], voids: true, received: false },
+    });
   const session = {
     enabled: true,
     authenticated,
@@ -62,7 +74,15 @@ await context.route('**/api/v1/**', async (route) => {
     csrfToken: 'test-csrf',
     organizationId: authenticated ? 'org-test' : null,
     organizations: authenticated
-      ? [{ id: 'org-test', name: 'Organización de prueba', role: 'owner' }]
+      ? [
+          {
+            id: 'org-test',
+            name: 'Organización de prueba',
+            role: 'owner',
+            environment: 'sandbox',
+            companyId: 'company-test',
+          },
+        ]
       : [],
   };
   if (path.endsWith('/auth/session')) return respond(session);
@@ -152,8 +172,8 @@ try {
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     'mobile list must not overflow viewport',
   );
-  await page.getByRole('link', { name: 'Nueva factura', exact: true }).click();
-  await page.getByLabel('RUC', { exact: true }).fill('20123456789');
+  await page.getByRole('link', { name: 'Nuevo comprobante', exact: true }).click();
+  await page.locator('input[inputmode="numeric"]').fill('20123456789');
   await page.getByLabel('Razón social').fill('Cliente de prueba SAC');
   await page.getByLabel('Descripción del ítem 1').fill('Servicio de diseño web');
   await page.getByLabel('Valor unitario del ítem 1').fill('100');
@@ -165,7 +185,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${screenshots}05-nueva.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Emitir factura', exact: true }).click();
+  await page.getByRole('button', { name: 'Emitir comprobante', exact: true }).click();
   await page.getByRole('button', { name: 'Reintentar mismo envío' }).waitFor();
   assert.equal(await page.getByLabel('Razón social').isDisabled(), true);
   await page.getByRole('button', { name: 'Reintentar mismo envío' }).click();
@@ -187,12 +207,15 @@ try {
   await page.getByRole('button', { name: 'Confirmar solicitud' }).click();
   await page.getByText('Anulada', { exact: true }).waitFor();
   mode = 'beta';
-  await page.getByRole('link', { name: 'Volver a facturas' }).click();
-  await page.getByRole('link', { name: 'Nueva factura', exact: true }).click();
-  await page.getByText('SUNAT beta admite', { exact: false }).waitFor();
-  assert.equal(await page.getByLabel('Cantidad del ítem 1').getAttribute('readonly'), '');
-  assert.equal(await page.getByLabel('Moneda', { exact: true }).isDisabled(), true);
-  assert.equal(await page.getByRole('button', { name: 'Agregar ítem' }).count(), 0);
+  await page.getByRole('link', { name: 'Volver a comprobantes' }).click();
+  await page.getByRole('link', { name: 'Nuevo comprobante', exact: true }).click();
+  await page.getByText('Este comprobante se enviará a SUNAT beta', { exact: false }).waitFor();
+  assert.equal(await page.getByLabel('Cantidad del ítem 1').getAttribute('readonly'), null);
+  assert.equal(await page.getByLabel('Moneda', { exact: true }).isDisabled(), false);
+  await page.getByRole('button', { name: 'Agregar ítem' }).click();
+  await page.getByLabel('Cantidad del ítem 2').fill('3');
+  await page.getByLabel('Tipo de comprobante').selectOption('03');
+  await page.getByRole('option', { name: 'DNI', exact: true }).waitFor({ state: 'attached' });
   const storage = await page.evaluate(() =>
     JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
   );
@@ -203,7 +226,7 @@ try {
   await page.getByRole('heading', { name: 'Tu facturación empieza aquí' }).waitFor();
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: connection, pagination, search, status filter, error recovery, responsive list/form, safe issuance retry, status polling, download, void, beta constraints, credential isolation.',
+    'PASS: connection, pagination, search, status filter, error recovery, responsive list/form, safe issuance retry, status polling, download, void, sandbox multi-line and document types, credential isolation.',
   );
 } finally {
   await browser.close();

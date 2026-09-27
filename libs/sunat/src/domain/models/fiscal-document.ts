@@ -9,6 +9,8 @@ export interface FiscalPartySnapshot {
 }
 
 export interface FiscalTaxSnapshot {
+  percent?: string;
+  affectationCode?: string;
   schemeId: string;
   schemeName: string;
   taxAmount: string;
@@ -34,6 +36,7 @@ export interface ReferencedFiscalDocument {
 
 /** Immutable fiscal snapshot resolved from Core using payloadRef. */
 export interface FiscalDocumentSnapshot {
+  environment?: 'beta' | 'production';
   documentId: string;
   documentType: FiscalDocumentType;
   series: string;

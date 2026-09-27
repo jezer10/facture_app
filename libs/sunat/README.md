@@ -4,16 +4,16 @@ Este módulo consume `billing.sunat.commands.v1` y publica resultados en
 `billing.sunat.results.v1`. Los jobs contienen identificadores, referencias R2 y
 SHA-256; nunca credenciales SOL, certificados ni contraseñas.
 
-## Modos
+## Ambientes
 
-- `mock`: proveedor y firma simulados, con payloads/artefactos en R2 y ledger/journal
-  en `billing_sunat`. `SUNAT_MOCK_ALLOW_ANY_ISSUER=true` habilita emisores dinámicos
-  sólo fuera de producción. Los adapters en memoria quedan reservados a pruebas que
-  invoquen `SunatModule.forMock()` explícitamente.
-- `production`: usa persistencia, R2 y sobres cifrados con
-  `BILLING_MASTER_KEY_FILE`. Los endpoints oficiales son configurables mediante
-  `SUNAT_BILL_SERVICE_URL` y `SUNAT_CONSULT_SERVICE_URL`; el timeout usa
-  `SUNAT_TIMEOUT_MS`.
+- `beta` (predeterminado): conexión oficial de pruebas, firma XMLDSig con certificado
+  de prueba, UBL 2.1 para 01/03/07/08, bajas RA/RC, tickets, PDF y CDR. Admite un
+  despliegue con `NODE_ENV=production`; eso no confiere validez fiscal al Sandbox.
+- `production`: adaptador directo todavía bloqueado hasta completar su verificación.
+
+No hay configuración de simulador. Los dobles de pruebas viven en `testing/doubles`
+y no son exportados por el módulo público ni registrados por el servicio.
+Ver [aislamiento y validación](../../docs/company-environments.md).
 
 ## Bloqueo productivo intencional
 

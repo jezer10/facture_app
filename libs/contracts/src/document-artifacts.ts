@@ -1,6 +1,12 @@
 import type { ArtifactReference } from './event-envelope';
 
-export const SUNAT_DOCUMENT_ARTIFACT_KINDS = ['xml', 'signed-xml', 'zip', 'cdr'] as const;
+export const SUNAT_DOCUMENT_ARTIFACT_KINDS = [
+  'xml',
+  'signed-xml',
+  'zip',
+  'cdr',
+  'void-cdr',
+] as const;
 export type SunatDocumentArtifactKind = (typeof SUNAT_DOCUMENT_ARTIFACT_KINDS)[number];
 
 export const CORE_DOCUMENT_ARTIFACT_KINDS = ['canonical-json', 'pdf'] as const;
@@ -12,6 +18,7 @@ export const DOCUMENT_ARTIFACT_CONTENT_TYPES = Object.freeze({
   'signed-xml': 'application/xml',
   zip: 'application/zip',
   cdr: 'application/zip',
+  'void-cdr': 'application/zip',
   pdf: 'application/pdf',
 } satisfies Readonly<Record<ArtifactReference['kind'], string>>);
 

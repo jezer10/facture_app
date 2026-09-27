@@ -5,7 +5,14 @@ export interface BrowserSession {
   authenticated: boolean;
   email?: string;
   csrfToken?: string;
-  organizations?: { id: string; name: string; role: 'owner' | 'admin' | 'viewer' }[];
+  organizations?: {
+    id: string;
+    name: string;
+    role: 'owner' | 'admin' | 'viewer';
+    environment: 'sandbox' | 'production';
+    companyId: string | null;
+    verified: boolean;
+  }[];
   organizationId?: string | null;
   expiresAt?: string;
 }

@@ -74,11 +74,11 @@ onMounted(async () => {
 <template>
   <header class="page-header">
     <div>
-      <h1 tabindex="-1">Facturas</h1>
+      <h1 tabindex="-1">Comprobantes</h1>
       <p class="page-description">Tus comprobantes, del primer envío a la descarga.</p>
     </div>
     <RouterLink :to="connected ? '/facturas/nueva' : '/conexion'" class="button button--primary"
-      ><AppIcon name="plus" />Nueva factura</RouterLink
+      ><AppIcon name="plus" />Nuevo comprobante</RouterLink
     >
   </header>
   <section class="panel" aria-label="Listado de comprobantes">

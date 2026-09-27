@@ -28,6 +28,9 @@ interface BrowserSession {
   expires_at: Date;
 }
 interface OrganizationAccess {
+  environment: 'sandbox' | 'production';
+  companyId: string | null;
+  verified: boolean;
   id: string;
   name: string;
   role: OrganizationRole;
@@ -275,7 +278,7 @@ export class BrowserSessionService {
 
   private organizations(subject: string): Promise<OrganizationAccess[]> {
     return this.database.query<OrganizationAccess[]>(
-      'SELECT o.id,o.name,m.role FROM organizations o JOIN organization_members m ON m.organization_id=o.id WHERE m.subject=$1 ORDER BY o.name,o.id',
+      'SELECT o.id,o.name,m.role,o.environment,o.company_id AS "companyId",(o.verified_at IS NOT NULL) AS verified FROM organizations o JOIN organization_members m ON m.organization_id=o.id WHERE m.subject=$1 ORDER BY o.name,o.id',
       [subject],
     );
   }

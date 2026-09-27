@@ -13,6 +13,7 @@ export interface CompanyRegistration {
   id: string;
   status: 'draft' | 'pending' | 'approved' | 'rejected';
   data: Partial<CompanyData>;
+  sandbox_organization_id: string | null;
   organization_id: string | null;
   decision_note: string | null;
 }

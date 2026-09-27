@@ -23,6 +23,9 @@ export function parseFiscalDocumentSnapshot(
   const lines = parseLines(source.lines);
   const totals = optionalRecord(source.totals);
   const snapshot: FiscalDocumentSnapshot = {
+    ...(source.environment === 'beta' || source.environment === 'production'
+      ? { environment: source.environment }
+      : {}),
     documentId: requireText(source.documentId ?? context.documentId, 'documentId'),
     documentType,
     series: requirePattern(source.series, 'series', /^[A-Z0-9-]{1,20}$/),
@@ -124,6 +127,13 @@ function parseTax(
 ): FiscalTaxSnapshot {
   const source = value === undefined ? line : requireRecord(value, 'SUNAT_INVALID_TAX');
   return {
+    ...(line.taxRate !== undefined
+      ? {
+          percent: new Decimal(requireNonNegativeDecimal(line.taxRate, `${path}.taxRate`))
+            .mul(100)
+            .toString(),
+        }
+      : {}),
     schemeId: requireText(
       source.schemeId ?? taxSchemeId(line.taxAffectation),
       `${path}.tax.schemeId`,
@@ -137,7 +147,10 @@ function parseTax(
       `${path}.tax.taxAmount`,
     ),
     taxableAmount: requireNonNegativeDecimal(
-      source.taxableAmount ?? lineExtensionAmount,
+      source.taxableAmount !== undefined &&
+        new Decimal(requireNonNegativeDecimal(source.taxableAmount, `${path}.taxableAmount`)).gt(0)
+        ? source.taxableAmount
+        : lineExtensionAmount,
       `${path}.tax.taxableAmount`,
     ),
   };

@@ -21,6 +21,7 @@ import {
   IssuerEntity,
   IssuerSeriesEntity,
   OutboxEventEntity,
+  OrganizationEntity,
   ServiceAccountIssuerGrantEntity,
 } from '../database/entities';
 import {
@@ -575,6 +576,14 @@ function createHarness(): TestHarness {
   const outbox = repositoryDouble(OutboxEventEntity);
   const seriesRepository = repositoryDouble(IssuerSeriesEntity);
   const repositories = new Map<object, unknown>([
+    [
+      OrganizationEntity,
+      {
+        findOneBy: jest
+          .fn()
+          .mockResolvedValue({ id: PRINCIPAL.organizationId, environment: 'sandbox' }),
+      },
+    ],
     [DocumentStateHistoryEntity, history],
     [FiscalDocumentEntity, document],
     [FiscalDocumentLineEntity, line],
@@ -591,7 +600,10 @@ function createHarness(): TestHarness {
     }
     return repository;
   });
-  const manager = { getRepository } as unknown as EntityManager;
+  const manager = {
+    getRepository,
+    query: jest.fn().mockResolvedValue([{ email: 'buyer@example.test' }]),
+  } as unknown as EntityManager;
   const transaction = jest.fn(
     async <T>(
       _isolation: 'SERIALIZABLE',

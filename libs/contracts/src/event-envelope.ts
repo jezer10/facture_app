@@ -13,7 +13,7 @@ export interface EventEnvelope<TType extends string, TPayload> {
 }
 
 export interface ArtifactReference {
-  readonly kind: 'canonical-json' | 'xml' | 'signed-xml' | 'zip' | 'cdr' | 'pdf';
+  readonly kind: 'canonical-json' | 'xml' | 'signed-xml' | 'zip' | 'cdr' | 'void-cdr' | 'pdf';
   readonly objectKey: string;
   readonly sha256: string;
   readonly contentType: string;

@@ -1,5 +1,5 @@
-import { fiscalDocumentFixture } from '../../testing/sunat-test-fixtures';
-import { DeterministicUblBuilder } from '../ubl/deterministic-ubl-builder';
+import { fiscalDocumentFixture } from '../sunat-test-fixtures';
+import { DeterministicUblBuilder } from '../../infrastructure/ubl/deterministic-ubl-builder';
 import { MockOnlyXmlSignerAdapter } from './mock-only-xml-signer.adapter';
 
 describe('MockOnlyXmlSignerAdapter', () => {

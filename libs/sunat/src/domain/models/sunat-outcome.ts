@@ -58,7 +58,7 @@ export type SunatVoidOutcome =
   | {
       status: 'voided';
       providerTrackingId: string;
-      artifacts: readonly [];
+      artifacts: readonly StoredSunatArtifact[];
     }
   | Extract<SunatSubmissionOutcome, { status: 'rejected' | 'pending' }>;
 

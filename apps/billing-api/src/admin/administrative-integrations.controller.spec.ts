@@ -24,8 +24,9 @@ describe('AdministrativeIntegrationsController', () => {
   it('uses the principal-aware issuer lookup before provisioning SUNAT credentials', async () => {
     const { administration, controller, internalServices } = createController();
     const issuer = activeIssuer();
+    issuer.environment = 'production';
     const body = Object.assign(new ProvisionSunatCredentialDto(), {
-      environment: 'beta' as const,
+      environment: 'production' as const,
       solUsername: 'MODDATOS',
       solPassword: 'secret',
     });
